@@ -1,0 +1,19 @@
+{
+  "name": "math-games-collection",
+  "version": "1.0.0",
+  "description": "数学游戏集合 - 支持移动端、PC端和微信分享",
+  "main": "index.html",
+  "scripts": {
+    "dev": "npx serve . -p 3000",
+    "start": "npx serve . -p 8080"
+  },
+  "keywords": [
+    "math",
+    "game",
+    "tower-defense",
+    "education",
+    "grade-5"
+  ],
+  "author": "",
+  "license": "MIT"
+}

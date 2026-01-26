@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>数学塔防 - 五年级上册</title>
+    <link rel="stylesheet" href="css/style.css">
+    <!-- 微信分享配置 -->
+    <meta property="og:title" content="数学塔防 - 五年级上册">
+    <meta property="og:description" content="边玩边学！用数学知识守护你的基地！">
+    <meta property="og:image" content="assets/share-cover.png">
+</head>
+<body>
+    <!-- 游戏容器 -->
+    <div id="game-container">
+        <!-- 主菜单 -->
+        <div id="main-menu" class="screen active">
+            <div class="menu-content">
+                <h1>🏰 数学塔防</h1>
+                <p class="subtitle">五年级上册</p>
+                <div class="menu-buttons">
+                    <button id="btn-start" class="btn btn-primary">开始游戏</button>
+                    <button id="btn-select-level" class="btn btn-secondary">选择关卡</button>
+                    <button id="btn-help" class="btn btn-secondary">游戏说明</button>
+                </div>
+                <div class="knowledge-tags">
+                    <span class="tag">小数乘法</span>
+                    <span class="tag">小数除法</span>
+                    <span class="tag">简易方程</span>
+                    <span class="tag">多边形面积</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 关卡选择 -->
+        <div id="level-select" class="screen">
+            <div class="screen-header">
+                <button class="btn-back">← 返回</button>
+                <h2>选择关卡</h2>
+            </div>
+            <div class="level-grid" id="level-grid">
+                <!-- 动态生成关卡按钮 -->
+            </div>
+        </div>
+
+        <!-- 游戏说明 -->
+        <div id="help-screen" class="screen">
+            <div class="screen-header">
+                <button class="btn-back">← 返回</button>
+                <h2>游戏说明</h2>
+            </div>
+            <div class="help-content">
+                <div class="help-section">
+                    <h3>🎯 游戏目标</h3>
+                    <p>阻止怪物到达终点！答对数学题获得金币，建造防御塔消灭敌人。</p>
+                </div>
+                <div class="help-section">
+                    <h3>🏗️ 如何建塔</h3>
+                    <p>点击地图上的空地，答对数学题即可建造防御塔。</p>
+                </div>
+                <div class="help-section">
+                    <h3>⬆️ 升级防御塔</h3>
+                    <p>点击已有的塔，答对更难的题目可以升级！</p>
+                </div>
+                <div class="help-section">
+                    <h3>💡 防御塔类型</h3>
+                    <ul>
+                        <li><span class="tower-icon archer">🏹</span> 弓箭塔 - 攻速快，伤害低</li>
+                        <li><span class="tower-icon magic">✨</span> 魔法塔 - 范围攻击</li>
+                        <li><span class="tower-icon cannon">💣</span> 炮塔 - 伤害高，攻速慢</li>
+                        <li><span class="tower-icon ice">❄️</span> 冰冻塔 - 减速敌人</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- 游戏主界面 -->
+        <div id="game-screen" class="screen">
+            <!-- 顶部信息栏 -->
+            <div class="game-header">
+                <div class="info-left">
+                    <span class="lives">❤️ <span id="lives">20</span></span>
+                    <span class="gold">💰 <span id="gold">100</span></span>
+                </div>
+                <div class="info-center">
+                    <span class="wave">第 <span id="wave">1</span> 波</span>
+                </div>
+                <div class="info-right">
+                    <button id="btn-pause" class="btn-icon">⏸️</button>
+                    <button id="btn-speed" class="btn-icon">⏩</button>
+                </div>
+            </div>
+
+            <!-- 游戏画布 -->
+            <canvas id="game-canvas"></canvas>
+
+            <!-- 底部塔选择栏 -->
+            <div class="tower-bar">
+                <div class="tower-slot" data-tower="archer">
+                    <span class="tower-icon">🏹</span>
+                    <span class="tower-cost">50</span>
+                </div>
+                <div class="tower-slot" data-tower="magic">
+                    <span class="tower-icon">✨</span>
+                    <span class="tower-cost">80</span>
+                </div>
+                <div class="tower-slot" data-tower="cannon">
+                    <span class="tower-icon">💣</span>
+                    <span class="tower-cost">100</span>
+                </div>
+                <div class="tower-slot" data-tower="ice">
+                    <span class="tower-icon">❄️</span>
+                    <span class="tower-cost">70</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 数学题弹窗 -->
+        <div id="math-modal" class="modal">
+            <div class="modal-content">
+                <div class="math-question">
+                    <div class="question-type" id="question-type">小数乘法</div>
+                    <div class="question-text" id="question-text">2.5 × 4 = ?</div>
+                </div>
+                <div class="answer-area">
+                    <input type="text" id="answer-input" inputmode="decimal" placeholder="输入答案">
+                    <div class="answer-options" id="answer-options">
+                        <!-- 选择题选项 -->
+                    </div>
+                </div>
+                <div class="modal-buttons">
+                    <button id="btn-submit-answer" class="btn btn-primary">确定</button>
+                    <button id="btn-skip" class="btn btn-secondary">跳过 (-20💰)</button>
+                </div>
+                <div class="feedback" id="feedback"></div>
+            </div>
+        </div>
+
+        <!-- 暂停弹窗 -->
+        <div id="pause-modal" class="modal">
+            <div class="modal-content">
+                <h2>游戏暂停</h2>
+                <div class="modal-buttons">
+                    <button id="btn-resume" class="btn btn-primary">继续游戏</button>
+                    <button id="btn-restart" class="btn btn-secondary">重新开始</button>
+                    <button id="btn-quit" class="btn btn-secondary">返回菜单</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 游戏结束弹窗 -->
+        <div id="game-over-modal" class="modal">
+            <div class="modal-content">
+                <h2 id="game-result-title">游戏结束</h2>
+                <div class="game-stats">
+                    <p>通过波数: <span id="final-wave">0</span></p>
+                    <p>消灭敌人: <span id="enemies-killed">0</span></p>
+                    <p>答对题目: <span id="questions-correct">0</span></p>
+                    <p>正确率: <span id="accuracy">0%</span></p>
+                </div>
+                <div class="modal-buttons">
+                    <button id="btn-retry" class="btn btn-primary">再玩一次</button>
+                    <button id="btn-share" class="btn btn-secondary">分享成绩</button>
+                    <button id="btn-back-menu" class="btn btn-secondary">返回菜单</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 游戏脚本 -->
+    <script src="js/math.js"></script>
+    <script src="js/game.js"></script>
+    <script src="js/ui.js"></script>
+</body>
+</html>
