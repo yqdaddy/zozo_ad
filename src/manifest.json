@@ -9,7 +9,7 @@
     "title": "数学游戏集合",
     "router": {
       "mode": "hash",
-      "base": "./"
+      "base": "/zozo_ad/"
     },
     "devServer": {
       "port": 3000
