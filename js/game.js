@@ -136,17 +136,27 @@ const Game = {
     },
 
     /**
-     * 初始化游戏
+     * 初始化游戏（仅绑定事件，不计算尺寸）
      */
     init() {
         this.canvas = document.getElementById('game-canvas');
         this.ctx = this.canvas.getContext('2d');
-        this.resizeCanvas();
-        this.generatePath();
         this.bindEvents();
 
         // 监听窗口大小变化
-        window.addEventListener('resize', () => this.resizeCanvas());
+        window.addEventListener('resize', () => {
+            if (this.canvas.offsetParent !== null) {
+                this.resizeCanvas();
+            }
+        });
+    },
+
+    /**
+     * 初始化画布（在游戏界面显示后调用）
+     */
+    initCanvas() {
+        this.resizeCanvas();
+        this.generatePath();
     },
 
     /**
@@ -160,15 +170,16 @@ const Game = {
         const headerHeight = header ? header.offsetHeight : 50;
         const towerBarHeight = towerBar ? towerBar.offsetHeight : 80;
 
-        this.canvasWidth = container.clientWidth;
-        this.canvasHeight = container.clientHeight - headerHeight - towerBarHeight;
+        // 获取容器尺寸，设置最小值防止出错
+        this.canvasWidth = Math.max(container.clientWidth || 320, 320);
+        this.canvasHeight = Math.max((container.clientHeight || 480) - headerHeight - towerBarHeight, 200);
 
         this.canvas.width = this.canvasWidth;
         this.canvas.height = this.canvasHeight;
 
-        // 重新计算网格大小
-        this.config.gridSize = Math.floor(this.canvasWidth / this.config.cols);
-        this.config.rows = Math.floor(this.canvasHeight / this.config.gridSize);
+        // 重新计算网格大小，确保最小值
+        this.config.gridSize = Math.max(Math.floor(this.canvasWidth / this.config.cols), 20);
+        this.config.rows = Math.max(Math.floor(this.canvasHeight / this.config.gridSize), 5);
 
         // 重新生成路径
         if (this.path.length > 0) {
@@ -394,6 +405,7 @@ const Game = {
      * 开始新波次
      */
     startWave() {
+        this.state.waveInProgress = true;
         const waveConfig = this.getWaveConfig(this.state.wave);
         this.spawnEnemies(waveConfig);
     },
@@ -448,11 +460,18 @@ const Game = {
     spawnEnemies(waveConfig) {
         let delay = 0;
         const spawnDelay = waveConfig.delay;
+        const totalEnemies = waveConfig.enemies.length;
+        let spawnedCount = 0;
 
         waveConfig.enemies.forEach((type, index) => {
             setTimeout(() => {
                 if (!this.state.isGameOver && !this.state.isPaused) {
                     this.spawnEnemy(type);
+                }
+                spawnedCount++;
+                // 所有敌人生成完毕后，标记波次生成完成
+                if (spawnedCount >= totalEnemies) {
+                    this.state.waveInProgress = false;
                 }
             }, delay);
             delay += spawnDelay;
@@ -463,6 +482,12 @@ const Game = {
      * 生成单个敌人
      */
     spawnEnemy(type) {
+        // 检查路径是否已生成
+        if (!this.path || this.path.length === 0) {
+            console.warn('Path not generated yet');
+            return;
+        }
+
         const config = this.enemyTypes[type];
         const waveMultiplier = 1 + (this.state.wave - 1) * this.config.difficultyScale;
 
@@ -985,8 +1010,13 @@ const Game = {
     start() {
         this.resetGame();
         UI.showScreen('game-screen');
-        this.startWave();
-        this.gameLoop(0);
+
+        // 延迟初始化画布，确保游戏屏幕已显示
+        requestAnimationFrame(() => {
+            this.initCanvas();
+            this.startWave();
+            this.gameLoop(0);
+        });
     },
 
     /**
