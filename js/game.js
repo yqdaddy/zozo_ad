@@ -171,15 +171,23 @@ const Game = {
         const towerBarHeight = towerBar ? towerBar.offsetHeight : 80;
 
         // 获取容器尺寸，设置最小值防止出错
-        this.canvasWidth = Math.max(container.clientWidth || 320, 320);
-        this.canvasHeight = Math.max((container.clientHeight || 480) - headerHeight - towerBarHeight, 200);
+        const containerWidth = container ? container.clientWidth : 320;
+        const containerHeight = container ? container.clientHeight : 480;
+
+        this.canvasWidth = Math.max(containerWidth || 320, 320);
+        this.canvasHeight = Math.max(containerHeight - headerHeight - towerBarHeight, 200);
 
         this.canvas.width = this.canvasWidth;
         this.canvas.height = this.canvasHeight;
 
-        // 重新计算网格大小，确保最小值
-        this.config.gridSize = Math.max(Math.floor(this.canvasWidth / this.config.cols), 20);
-        this.config.rows = Math.max(Math.floor(this.canvasHeight / this.config.gridSize), 5);
+        // 重新计算网格大小，确保最小值和有效性
+        const cols = Math.max(this.config.cols || 10, 5);
+        let gridSize = Math.floor(this.canvasWidth / cols);
+        gridSize = Math.max(gridSize, 20);
+        gridSize = Math.min(gridSize, 100); // 设置最大值防止过大
+
+        this.config.gridSize = gridSize;
+        this.config.rows = Math.max(Math.floor(this.canvasHeight / gridSize), 5);
 
         // 重新生成路径
         if (this.path.length > 0) {
@@ -191,7 +199,25 @@ const Game = {
      * 生成敌人路径
      */
     generatePath() {
-        const { cols, rows, gridSize } = this.config;
+        let { cols, rows, gridSize } = this.config;
+
+        // 验证参数有效性，防止创建无效数组
+        if (!Number.isFinite(rows) || rows < 5) {
+            console.warn('Invalid rows value:', rows, 'using default 12');
+            rows = 12;
+            this.config.rows = rows;
+        }
+        if (!Number.isFinite(cols) || cols < 5) {
+            console.warn('Invalid cols value:', cols, 'using default 10');
+            cols = 10;
+            this.config.cols = cols;
+        }
+        if (!Number.isFinite(gridSize) || gridSize < 10) {
+            console.warn('Invalid gridSize value:', gridSize, 'using default 40');
+            gridSize = 40;
+            this.config.gridSize = gridSize;
+        }
+
         this.path = [];
         this.pathGrid = Array(rows).fill(null).map(() => Array(cols).fill(false));
 
@@ -246,6 +272,17 @@ const Game = {
             x: this.path[this.path.length - 1].x,
             y: this.canvasHeight
         });
+
+        // 验证路径是否有效
+        if (this.path.length < 2) {
+            console.error('Generated path is too short:', this.path.length);
+            // 创建一个简单的默认路径
+            this.path = [
+                { x: gridSize / 2, y: gridSize / 2 },
+                { x: this.canvasWidth - gridSize / 2, y: this.canvasHeight / 2 },
+                { x: this.canvasWidth - gridSize / 2, y: this.canvasHeight }
+            ];
+        }
     },
 
     /**
@@ -482,13 +519,23 @@ const Game = {
      * 生成单个敌人
      */
     spawnEnemy(type) {
-        // 检查路径是否已生成
-        if (!this.path || this.path.length === 0) {
-            console.warn('Path not generated yet');
-            return;
+        // 检查路径是否已生成且有效
+        if (!this.path || this.path.length < 2 || !this.path[0]) {
+            console.warn('Path not properly generated, regenerating...');
+            this.generatePath();
+            // 再次检查
+            if (!this.path || this.path.length < 2 || !this.path[0]) {
+                console.error('Failed to generate valid path');
+                return;
+            }
         }
 
         const config = this.enemyTypes[type];
+        if (!config) {
+            console.error('Invalid enemy type:', type);
+            return;
+        }
+
         const waveMultiplier = 1 + (this.state.wave - 1) * this.config.difficultyScale;
 
         const enemy = {
