@@ -318,52 +318,44 @@ export default {
       const sysInfo = uni.getSystemInfoSync()
       this.dpr = sysInfo.pixelRatio || 2
 
-      // 使用安全区域计算
-      const safeArea = sysInfo.safeArea || { top: 0, bottom: sysInfo.windowHeight }
-      const statusBarHeight = sysInfo.statusBarHeight || 0
-
-      // 屏幕尺寸
-      const screenWidth = sysInfo.windowWidth
-      const screenHeight = sysInfo.windowHeight
-
-      // 各部分高度（单位：px）
-      // header: 包含状态栏安全区 + 实际内容高度（约50px）
-      const headerHeight = statusBarHeight + 50
-      // tip bar: 约40px
-      const tipHeight = 40
-      // tower bar: 约90px + 底部安全区
-      const safeBottom = sysInfo.screenHeight - safeArea.bottom
-      const towerBarHeight = 90 + safeBottom
-
-      // 画布尺寸 = 屏幕高度 - 各部分高度
-      this.canvasWidth = screenWidth
-      this.canvasHeight = Math.max(200, screenHeight - headerHeight - tipHeight - towerBarHeight)
-
-      // 计算网格 - 确保网格适配画布
-      this.config.cols = 8
-      this.config.gridSize = Math.floor(this.canvasWidth / this.config.cols)
-      this.config.rows = Math.floor(this.canvasHeight / this.config.gridSize)
-
-      // 重新调整画布高度为网格的整数倍，避免底部出现空白
-      this.canvasHeight = this.config.rows * this.config.gridSize
-
-      console.log('Canvas size:', this.canvasWidth, 'x', this.canvasHeight, 'Grid:', this.config.cols, 'x', this.config.rows)
+      // 先设置一个临时尺寸，等待 DOM 渲染后再获取实际尺寸
+      this.canvasWidth = sysInfo.windowWidth
+      this.canvasHeight = 300
 
       this.$nextTick(() => {
+        // 查询 canvas-wrapper 的实际尺寸
         const query = uni.createSelectorQuery().in(this)
-        query.select('#gameCanvas')
+        query.select('#canvasWrapper')
+          .boundingClientRect()
+          .select('#gameCanvas')
           .fields({ node: true, size: true })
           .exec((res) => {
-            if (!res || !res[0] || !res[0].node) {
+            if (!res || !res[0] || !res[1] || !res[1].node) {
               console.error('Canvas not found, retrying...')
               setTimeout(() => this.initCanvas(), 200)
               return
             }
 
-            this.canvas = res[0].node
+            const wrapperRect = res[0]
+            this.canvas = res[1].node
             this.ctx = this.canvas.getContext('2d')
 
-            // 设置 canvas 实际像素尺寸
+            // 使用 wrapper 的实际尺寸
+            this.canvasWidth = Math.floor(wrapperRect.width)
+            this.canvasHeight = Math.floor(wrapperRect.height)
+
+            // 计算网格
+            this.config.cols = 8
+            this.config.gridSize = Math.floor(this.canvasWidth / this.config.cols)
+            this.config.rows = Math.floor(this.canvasHeight / this.config.gridSize)
+
+            // 调整画布高度为网格整数倍
+            this.canvasHeight = this.config.rows * this.config.gridSize
+
+            console.log('Wrapper:', wrapperRect.width, 'x', wrapperRect.height)
+            console.log('Canvas:', this.canvasWidth, 'x', this.canvasHeight, 'Grid:', this.config.cols, 'x', this.config.rows)
+
+            // 设置 canvas 实际像素尺寸（高清屏）
             this.canvas.width = this.canvasWidth * this.dpr
             this.canvas.height = this.canvasHeight * this.dpr
             this.ctx.scale(this.dpr, this.dpr)
@@ -1297,11 +1289,14 @@ export default {
   justify-content: center;
   overflow: hidden;
   min-height: 0;
+  max-height: 100%;
 }
 
 .game-canvas {
   background: #2d5016;
   display: block;
+  max-width: 100%;
+  max-height: 100%;
 }
 
 .tip-bar {
