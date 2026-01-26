@@ -1,90 +1,95 @@
-# 数学游戏集合 - Math Games Collection
+# 数学游戏集合 (Math Games Collection)
 
-一个面向小学生的数学游戏集合，支持移动端、PC端和微信内分享。
+基于 uni-app 开发的数学游戏集合，支持多端发布。
+
+## 在线体验
+
+🎮 **GitHub Pages**: https://yqdaddy.github.io/zozo_ad/
 
 ## 游戏列表
 
-### 1. 数学塔防 - 五年级上册
+### 1. 🏰 数学塔防 (已上线)
+- **适合年级**: 五年级上册
+- **知识点**: 小数乘法、小数除法、简易方程、多边形面积
+- **玩法**: 答对数学题建造防御塔，阻止敌人到达终点
 
-用数学知识守护你的基地！
+### 2. 🏃 算术跑酷 (开发中)
+- **适合年级**: 四年级
+- **知识点**: 四则运算
 
-**知识点覆盖：**
-- 小数乘法
-- 小数除法
-- 简易方程
-- 多边形面积（长方形、正方形、平行四边形、三角形、梯形）
+### 3. 🧩 分数拼图 (计划中)
+- **适合年级**: 五年级
+- **知识点**: 分数运算
 
-**游戏玩法：**
-1. 点击空地建造防御塔
-2. 正确回答数学题才能建塔/升级
-3. 阻止敌人到达终点
-4. 挑战更高的波数！
+### 4. 📐 几何建造师 (计划中)
+- **适合年级**: 六年级
+- **知识点**: 几何图形
 
-**防御塔类型：**
-- 🏹 弓箭塔 - 攻速快，伤害低
-- ✨ 魔法塔 - 范围攻击
-- 💣 炮塔 - 伤害高，攻速慢
-- ❄️ 冰冻塔 - 减速敌人
+## 技术栈
 
-## 技术特点
+- **框架**: uni-app (Vue 3)
+- **构建工具**: Vite
+- **支持平台**:
+  - ✅ H5 (Web)
+  - ✅ 微信小程序
+  - 🔜 App (Android/iOS)
+  - 🔜 其他小程序平台
 
-- **纯HTML5 + Canvas** - 无需任何框架依赖
-- **响应式设计** - 自动适配手机和电脑屏幕
-- **即开即玩** - 打开链接直接游戏
-- **微信友好** - 可在微信内直接打开和分享
-- **本地存储** - 游戏进度自动保存
-
-## 快速开始
-
-### 本地运行
+## 本地开发
 
 ```bash
-# 方式1：使用 npx serve
-npx serve . -p 3000
+# 安装依赖
+npm install
 
-# 方式2：使用 Python
-python -m http.server 3000
+# 运行 H5 开发服务器
+npm run dev:h5
 
-# 方式3：直接打开 index.html
+# 构建 H5 版本
+npm run build:h5
+
+# 运行微信小程序
+npm run dev:mp-weixin
+
+# 构建微信小程序
+npm run build:mp-weixin
 ```
-
-### 部署
-
-将所有文件上传到任意静态服务器即可，如：
-- GitHub Pages
-- Vercel
-- Netlify
-- 阿里云 OSS
-- 腾讯云 COS
 
 ## 项目结构
 
 ```
-math-games/
-├── index.html          # 主页面
-├── css/
-│   └── style.css       # 样式文件
-├── js/
-│   ├── math.js         # 数学题库
-│   ├── game.js         # 游戏核心引擎
-│   └── ui.js           # UI交互模块
-├── assets/             # 资源文件
-└── package.json        # 项目配置
+├── src/
+│   ├── pages/
+│   │   ├── index/              # 游戏集合首页
+│   │   └── tower-defense/      # 数学塔防游戏
+│   ├── components/             # 公共组件
+│   ├── utils/
+│   │   └── math.js             # 数学题库
+│   ├── static/                 # 静态资源
+│   ├── App.vue                 # 应用入口
+│   ├── main.js
+│   ├── pages.json              # 页面路由配置
+│   └── manifest.json           # 应用配置
+├── .github/
+│   └── workflows/
+│       └── deploy.yml          # GitHub Actions 自动部署
+├── package.json
+└── vite.config.js
 ```
 
-## 扩展指南
+## 部署说明
 
-### 添加新的数学知识点
+### GitHub Pages (自动)
 
-编辑 `js/math.js`，在 `TYPES` 中添加新类型，并创建对应的生成函数。
+1. 将代码合并到 `main` 分支
+2. GitHub Actions 自动构建并部署
+3. 访问 `https://[用户名].github.io/[仓库名]/`
 
-### 添加新的防御塔
+### 微信小程序
 
-编辑 `js/game.js` 中的 `towerTypes` 对象。
-
-### 添加新的敌人类型
-
-编辑 `js/game.js` 中的 `enemyTypes` 对象。
+1. 在 `src/manifest.json` 中填入小程序 AppID
+2. 运行 `npm run build:mp-weixin`
+3. 使用微信开发者工具打开 `dist/build/mp-weixin` 目录
+4. 上传并提交审核
 
 ## License
 
