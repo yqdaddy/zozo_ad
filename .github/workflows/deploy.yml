@@ -3,8 +3,8 @@ name: Build and Deploy
 
 on:
   push:
-    branches: [ main, master ]
-  # 允许手动触发
+    branches: [ main, master, 'claude/**' ]
+  # 允许手动触发 - 可以选择任意分支
   workflow_dispatch:
 
 # 设置 GITHUB_TOKEN 权限
