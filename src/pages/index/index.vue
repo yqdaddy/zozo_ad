@@ -38,6 +38,11 @@
     <view class="footer">
       <text class="footer-text">适合小学生的数学学习游戏</text>
       <text class="version">v1.0.0</text>
+      <!-- #ifdef H5 -->
+      <navigator url="" open-type="navigate" class="icp-link" @click.prevent="openICP">
+        <text class="icp-text">粤ICP备18152027号</text>
+      </navigator>
+      <!-- #endif -->
     </view>
   </view>
 </template>
@@ -87,6 +92,11 @@ export default {
     }
   },
   methods: {
+    openICP() {
+      // #ifdef H5
+      window.open('https://beian.miit.gov.cn/', '_blank')
+      // #endif
+    },
     openGame(game) {
       if (game.comingSoon) {
         uni.showToast({
@@ -236,5 +246,15 @@ export default {
   font-size: 20rpx;
   color: #444;
   margin-top: 10rpx;
+}
+
+.icp-link {
+  display: block;
+  margin-top: 20rpx;
+}
+
+.icp-text {
+  font-size: 22rpx;
+  color: #666;
 }
 </style>
