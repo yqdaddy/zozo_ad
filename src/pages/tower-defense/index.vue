@@ -22,7 +22,7 @@
     <!-- 游戏界面 -->
     <view v-if="screen === 'game'" class="screen game-screen">
       <!-- 顶部信息栏 -->
-      <view class="game-header safe-area-top">
+      <view class="game-header">
         <view class="info-left">
           <text class="lives">❤️ {{ state.lives }}</text>
           <text class="gold">💰 {{ state.gold }}</text>
@@ -56,7 +56,7 @@
       </view>
 
       <!-- 底部塔选择栏 -->
-      <view class="tower-bar safe-area-bottom">
+      <view class="tower-bar">
         <view
           v-for="tower in towerList"
           :key="tower.type"
@@ -318,21 +318,36 @@ export default {
       const sysInfo = uni.getSystemInfoSync()
       this.dpr = sysInfo.pixelRatio || 2
 
-      // 计算画布尺寸
+      // 使用安全区域计算
+      const safeArea = sysInfo.safeArea || { top: 0, bottom: sysInfo.windowHeight }
+      const statusBarHeight = sysInfo.statusBarHeight || 0
+
+      // 屏幕尺寸
       const screenWidth = sysInfo.windowWidth
       const screenHeight = sysInfo.windowHeight
-      const headerHeight = 50
+
+      // 各部分高度（单位：px）
+      // header: 包含状态栏安全区 + 实际内容高度（约50px）
+      const headerHeight = statusBarHeight + 50
+      // tip bar: 约40px
       const tipHeight = 40
-      const towerBarHeight = 90
-      const safeBottom = sysInfo.safeAreaInsets?.bottom || 0
+      // tower bar: 约90px + 底部安全区
+      const safeBottom = sysInfo.screenHeight - safeArea.bottom
+      const towerBarHeight = 90 + safeBottom
 
+      // 画布尺寸 = 屏幕高度 - 各部分高度
       this.canvasWidth = screenWidth
-      this.canvasHeight = screenHeight - headerHeight - tipHeight - towerBarHeight - safeBottom - 20
+      this.canvasHeight = Math.max(200, screenHeight - headerHeight - tipHeight - towerBarHeight)
 
-      // 计算网格
+      // 计算网格 - 确保网格适配画布
       this.config.cols = 8
       this.config.gridSize = Math.floor(this.canvasWidth / this.config.cols)
       this.config.rows = Math.floor(this.canvasHeight / this.config.gridSize)
+
+      // 重新调整画布高度为网格的整数倍，避免底部出现空白
+      this.canvasHeight = this.config.rows * this.config.gridSize
+
+      console.log('Canvas size:', this.canvasWidth, 'x', this.canvasHeight, 'Grid:', this.config.cols, 'x', this.config.rows)
 
       this.$nextTick(() => {
         const query = uni.createSelectorQuery().in(this)
@@ -348,6 +363,7 @@ export default {
             this.canvas = res[0].node
             this.ctx = this.canvas.getContext('2d')
 
+            // 设置 canvas 实际像素尺寸
             this.canvas.width = this.canvasWidth * this.dpr
             this.canvas.height = this.canvasHeight * this.dpr
             this.ctx.scale(this.dpr, this.dpr)
@@ -1170,16 +1186,6 @@ export default {
   flex-direction: column;
 }
 
-.safe-area-top {
-  padding-top: constant(safe-area-inset-top);
-  padding-top: env(safe-area-inset-top);
-}
-
-.safe-area-bottom {
-  padding-bottom: constant(safe-area-inset-bottom);
-  padding-bottom: env(safe-area-inset-bottom);
-}
-
 /* 菜单样式 */
 .menu-screen {
   justify-content: center;
@@ -1252,6 +1258,8 @@ export default {
 .game-screen {
   height: 100vh;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .game-header {
@@ -1259,8 +1267,10 @@ export default {
   justify-content: space-between;
   align-items: center;
   padding: 16rpx 24rpx;
+  padding-top: calc(16rpx + constant(safe-area-inset-top));
+  padding-top: calc(16rpx + env(safe-area-inset-top));
   background: rgba(0, 0, 0, 0.6);
-  min-height: 50px;
+  flex-shrink: 0;
 }
 
 .info-left, .info-right {
@@ -1283,22 +1293,25 @@ export default {
 .canvas-wrapper {
   flex: 1;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   overflow: hidden;
+  min-height: 0;
 }
 
 .game-canvas {
   background: #2d5016;
+  display: block;
 }
 
 .tip-bar {
   padding: 12rpx 24rpx;
   background: rgba(0, 0, 0, 0.5);
-  min-height: 40px;
+  height: 40px;
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
 }
 
 .tip-bar.selected-tip {
@@ -1318,8 +1331,10 @@ export default {
   display: flex;
   justify-content: space-around;
   padding: 12rpx 8rpx;
+  padding-bottom: calc(12rpx + constant(safe-area-inset-bottom));
+  padding-bottom: calc(12rpx + env(safe-area-inset-bottom));
   background: rgba(0, 0, 0, 0.8);
-  min-height: 90px;
+  flex-shrink: 0;
 }
 
 .tower-slot {
