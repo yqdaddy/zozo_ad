@@ -6,7 +6,8 @@
         <text class="title">🏰 数学塔防</text>
         <text class="subtitle">五年级上册</text>
         <view class="menu-buttons">
-          <button class="btn btn-primary" @click="startGame">开始游戏</button>
+          <button class="btn btn-primary" @click="startGame('normal')">普通模式</button>
+          <button class="btn btn-primary" @click="startGame('endless')">无尽模式</button>
           <button class="btn btn-secondary" @click="showHelp = true">游戏说明</button>
           <button class="btn btn-secondary" @click="goBack">返回首页</button>
         </view>
@@ -15,6 +16,9 @@
           <text class="tag">小数除法</text>
           <text class="tag">简易方程</text>
           <text class="tag">多边形面积</text>
+        </view>
+        <view class="high-score" v-if="highScore > 0">
+          <text>🏆 最高记录: 第 {{ highScore }} 波</text>
         </view>
       </view>
     </view>
@@ -29,30 +33,51 @@
         </view>
         <view class="info-center">
           <text class="wave">第 {{ state.wave }} 波</text>
+          <text class="mode-tag" v-if="gameMode === 'endless'">无尽</text>
         </view>
         <view class="info-right">
           <text class="btn-icon" @click="pauseGame">⏸️</text>
-          <text class="btn-icon" @click="toggleSpeed">{{ state.gameSpeed === 1 ? '⏩' : '⏩⏩' }}</text>
+          <text class="btn-icon" @click="toggleSpeed">{{ state.gameSpeed }}x</text>
         </view>
       </view>
 
       <!-- 游戏画布 -->
-      <view class="canvas-wrapper" id="canvasWrapper">
+      <view class="canvas-container">
         <canvas
           id="gameCanvas"
           type="2d"
           class="game-canvas"
-          :style="{ width: canvasWidth + 'px', height: canvasHeight + 'px' }"
+          :style="canvasStyle"
           @touchstart.stop.prevent="handleTouch"
         ></canvas>
       </view>
 
-      <!-- 提示信息 -->
-      <view v-if="!selectedTower" class="tip-bar">
-        <text class="tip-text">👇 选择下方防御塔，点击绿色区域建造</text>
-      </view>
-      <view v-else class="tip-bar selected-tip">
-        <text class="tip-text">✅ 已选择 {{ getTowerName(selectedTower) }}，点击绿色区域建造</text>
+      <!-- 技能栏 -->
+      <view class="skill-bar">
+        <view
+          class="skill-btn"
+          :class="{ disabled: state.gold < 30, active: activeSkill === 'bomb' }"
+          @click="useSkill('bomb')"
+        >
+          <text class="skill-icon">💥</text>
+          <text class="skill-cost">30</text>
+        </view>
+        <view
+          class="skill-btn"
+          :class="{ disabled: state.gold < 40, active: activeSkill === 'freeze' }"
+          @click="useSkill('freeze')"
+        >
+          <text class="skill-icon">🧊</text>
+          <text class="skill-cost">40</text>
+        </view>
+        <view
+          class="skill-btn"
+          :class="{ disabled: state.gold < 50, active: activeSkill === 'heal' }"
+          @click="useSkill('heal')"
+        >
+          <text class="skill-icon">💖</text>
+          <text class="skill-cost">50</text>
+        </view>
       </view>
 
       <!-- 底部塔选择栏 -->
@@ -73,7 +98,7 @@
 
     <!-- 数学题弹窗 -->
     <view v-if="showMathModal" class="modal">
-      <view class="modal-content">
+      <view class="modal-content math-modal">
         <view class="math-question">
           <text class="question-type">{{ currentQuestion?.type }}</text>
           <text class="question-text">{{ currentQuestion?.question }}</text>
@@ -143,7 +168,6 @@
         </view>
         <view class="modal-buttons">
           <button class="btn btn-primary" @click="restartGame">再玩一次</button>
-          <button class="btn btn-secondary" @click="shareResult">分享成绩</button>
           <button class="btn btn-secondary" @click="quitGame">返回菜单</button>
         </view>
       </view>
@@ -155,7 +179,12 @@
         <text class="modal-title">游戏说明</text>
         <view class="help-section">
           <text class="help-title">🎯 游戏目标</text>
-          <text class="help-text">阻止怪物到达终点！答对数学题获得金币，建造防御塔消灭敌人。</text>
+          <text class="help-text">阻止怪物到达终点！答对数学题建造防御塔消灭敌人。</text>
+        </view>
+        <view class="help-section">
+          <text class="help-title">🎮 游戏模式</text>
+          <text class="help-text">普通模式 - 通过10波获胜</text>
+          <text class="help-text">无尽模式 - 看你能坚持多久</text>
         </view>
         <view class="help-section">
           <text class="help-title">🏗️ 如何建塔</text>
@@ -165,10 +194,17 @@
         </view>
         <view class="help-section">
           <text class="help-title">💡 防御塔类型</text>
-          <text class="help-text">🏹 弓箭塔 - 攻速快，单体伤害</text>
-          <text class="help-text">✨ 魔法塔 - 范围攻击，群伤</text>
-          <text class="help-text">💣 炮塔 - 高伤害，攻速慢</text>
+          <text class="help-text">🏹 弓箭塔 - 攻速快，单体</text>
+          <text class="help-text">✨ 魔法塔 - 范围攻击</text>
+          <text class="help-text">💣 炮塔 - 高伤害</text>
           <text class="help-text">❄️ 冰冻塔 - 减速敌人</text>
+          <text class="help-text">⚡ 雷电塔 - 连锁攻击</text>
+        </view>
+        <view class="help-section">
+          <text class="help-title">🎯 技能说明</text>
+          <text class="help-text">💥 炸弹 - 对区域敌人造成伤害</text>
+          <text class="help-text">🧊 冰冻 - 冻结所有敌人3秒</text>
+          <text class="help-text">💖 治愈 - 恢复5点生命</text>
         </view>
         <button class="btn btn-primary" @click="showHelp = false">知道了</button>
       </view>
@@ -187,6 +223,8 @@ export default {
       showMathModal: false,
       showPauseModal: false,
       showGameOverModal: false,
+      gameMode: 'normal',
+      highScore: 0,
 
       // 游戏状态
       state: {
@@ -199,21 +237,23 @@ export default {
         questionsAnswered: 0,
         questionsCorrect: 0,
         enemiesKilled: 0,
-        waveInProgress: false
+        waveInProgress: false,
+        globalFreeze: 0
       },
 
       // 游戏配置
       config: {
         gridSize: 40,
         cols: 8,
-        rows: 10
+        rows: 12
       },
 
       // Canvas 相关
       canvas: null,
       ctx: null,
       canvasWidth: 320,
-      canvasHeight: 400,
+      canvasHeight: 480,
+      canvasStyle: {},
       animationId: null,
       dpr: 1,
 
@@ -227,27 +267,32 @@ export default {
 
       // 防御塔选择
       selectedTower: null,
+      activeSkill: null,
       towerList: [
-        { type: 'archer', emoji: '🏹', cost: 50, name: '弓箭塔' },
-        { type: 'magic', emoji: '✨', cost: 80, name: '魔法塔' },
+        { type: 'archer', emoji: '🏹', cost: 50, name: '弓箭' },
+        { type: 'magic', emoji: '✨', cost: 80, name: '魔法' },
         { type: 'cannon', emoji: '💣', cost: 100, name: '炮塔' },
-        { type: 'ice', emoji: '❄️', cost: 70, name: '冰冻塔' }
+        { type: 'ice', emoji: '❄️', cost: 70, name: '冰冻' },
+        { type: 'lightning', emoji: '⚡', cost: 120, name: '雷电' }
       ],
 
-      // 防御塔配置（range 会在 buildTower 时根据 gridSize 调整）
+      // 防御塔配置
       towerTypes: {
-        archer: { damage: 15, rangeMultiplier: 2.5, fireRate: 600, projectileSpeed: 10, color: '#8B4513', projectileColor: '#FFD700' },
-        magic: { damage: 20, rangeMultiplier: 2.2, fireRate: 1000, projectileSpeed: 8, color: '#9C27B0', projectileColor: '#E040FB', splashMultiplier: 0.8 },
-        cannon: { damage: 40, rangeMultiplier: 2.3, fireRate: 1500, projectileSpeed: 6, color: '#555', projectileColor: '#FF5722' },
-        ice: { damage: 8, rangeMultiplier: 2.2, fireRate: 800, projectileSpeed: 9, color: '#00BCD4', projectileColor: '#80DEEA', slowEffect: 0.5, slowDuration: 2000 }
+        archer: { damage: 20, rangeMultiplier: 2.5, fireRate: 500, projectileSpeed: 12, color: '#8B4513', projectileColor: '#FFD700' },
+        magic: { damage: 25, rangeMultiplier: 2.2, fireRate: 900, projectileSpeed: 10, color: '#9C27B0', projectileColor: '#E040FB', splashMultiplier: 0.8 },
+        cannon: { damage: 60, rangeMultiplier: 2.0, fireRate: 1400, projectileSpeed: 8, color: '#555', projectileColor: '#FF5722' },
+        ice: { damage: 10, rangeMultiplier: 2.2, fireRate: 700, projectileSpeed: 10, color: '#00BCD4', projectileColor: '#80DEEA', slowEffect: 0.5, slowDuration: 2000 },
+        lightning: { damage: 35, rangeMultiplier: 2.8, fireRate: 1000, projectileSpeed: 20, color: '#FFC107', projectileColor: '#FFEB3B', chainCount: 3 }
       },
 
       // 敌人配置
       enemyTypes: {
-        basic: { emoji: '👾', health: 40, speed: 0.8, gold: 10, color: '#4CAF50' },
-        fast: { emoji: '💨', health: 25, speed: 1.5, gold: 15, color: '#03A9F4' },
-        tank: { emoji: '🛡️', health: 100, speed: 0.4, gold: 25, color: '#795548' },
-        boss: { emoji: '👹', health: 300, speed: 0.3, gold: 100, color: '#F44336' }
+        basic: { emoji: '👾', health: 50, speed: 1.0, gold: 10, color: '#4CAF50' },
+        fast: { emoji: '💨', health: 30, speed: 2.0, gold: 15, color: '#03A9F4' },
+        tank: { emoji: '🛡️', health: 150, speed: 0.5, gold: 25, color: '#795548' },
+        healer: { emoji: '💚', health: 60, speed: 0.8, gold: 20, color: '#8BC34A', healAura: true },
+        boss: { emoji: '👹', health: 400, speed: 0.4, gold: 100, color: '#F44336' },
+        ghost: { emoji: '👻', health: 40, speed: 1.2, gold: 20, color: '#9E9E9E', phaseShift: true }
       },
 
       // 数学题相关
@@ -274,9 +319,29 @@ export default {
     }
   },
 
+  mounted() {
+    this.loadHighScore()
+  },
+
   methods: {
     goBack() {
       uni.navigateBack()
+    },
+
+    loadHighScore() {
+      try {
+        const score = uni.getStorageSync('towerDefenseHighScore')
+        if (score) this.highScore = score
+      } catch (e) {}
+    },
+
+    saveHighScore() {
+      if (this.state.wave > this.highScore) {
+        this.highScore = this.state.wave
+        try {
+          uni.setStorageSync('towerDefenseHighScore', this.highScore)
+        } catch (e) {}
+      }
     },
 
     getTowerName(type) {
@@ -284,18 +349,19 @@ export default {
       return tower ? tower.name : ''
     },
 
-    startGame() {
+    startGame(mode) {
+      this.gameMode = mode
       this.resetGame()
       this.screen = 'game'
       this.$nextTick(() => {
-        setTimeout(() => this.initCanvas(), 100)
+        setTimeout(() => this.initCanvas(), 150)
       })
     },
 
     resetGame() {
       this.state = {
-        lives: 20,
-        gold: 100,
+        lives: this.gameMode === 'endless' ? 10 : 20,
+        gold: this.gameMode === 'endless' ? 150 : 100,
         wave: 1,
         gameSpeed: 1,
         isPaused: false,
@@ -303,50 +369,54 @@ export default {
         questionsAnswered: 0,
         questionsCorrect: 0,
         enemiesKilled: 0,
-        waveInProgress: false
+        waveInProgress: false,
+        globalFreeze: 0
       }
       this.towers = []
       this.enemies = []
       this.projectiles = []
       this.particles = []
       this.selectedTower = null
+      this.activeSkill = null
       this.pendingBuild = null
     },
 
     initCanvas() {
-      // 获取系统信息
       const sysInfo = uni.getSystemInfoSync()
       this.dpr = sysInfo.pixelRatio || 2
 
-      // 屏幕尺寸
+      // 计算可用空间
       const screenWidth = sysInfo.windowWidth
       const screenHeight = sysInfo.windowHeight
-
-      // 安全区域
       const statusBarHeight = sysInfo.statusBarHeight || 0
-      const safeAreaBottom = sysInfo.safeArea ? (sysInfo.screenHeight - sysInfo.safeArea.bottom) : 0
+      const safeBottom = sysInfo.safeArea ? (sysInfo.screenHeight - sysInfo.safeArea.bottom) : 0
 
-      // UI 高度估算（单位：px）
-      const headerHeight = statusBarHeight + 44  // 状态栏 + header内容
-      const tipBarHeight = 40
-      const towerBarHeight = 80 + safeAreaBottom
+      // UI 固定高度
+      const headerH = statusBarHeight + 44
+      const skillBarH = 50
+      const towerBarH = 70 + safeBottom
 
-      // 画布可用尺寸
-      this.canvasWidth = screenWidth
-      const availableHeight = screenHeight - headerHeight - tipBarHeight - towerBarHeight
+      // 画布尺寸 = 屏幕 - UI
+      const availableH = screenHeight - headerH - skillBarH - towerBarH
 
-      // 计算网格
+      // 网格计算
       this.config.cols = 8
-      this.config.gridSize = Math.floor(this.canvasWidth / this.config.cols)
-      this.config.rows = Math.floor(availableHeight / this.config.gridSize)
+      this.config.gridSize = Math.floor(screenWidth / this.config.cols)
+      this.config.rows = Math.floor(availableH / this.config.gridSize)
 
-      // 画布高度为网格整数倍
+      // 确保至少有8行
+      if (this.config.rows < 8) this.config.rows = 8
+
+      this.canvasWidth = this.config.cols * this.config.gridSize
       this.canvasHeight = this.config.rows * this.config.gridSize
 
-      console.log('Screen:', screenWidth, 'x', screenHeight)
-      console.log('Available height:', availableHeight)
-      console.log('Canvas:', this.canvasWidth, 'x', this.canvasHeight)
-      console.log('Grid:', this.config.cols, 'x', this.config.rows, 'size:', this.config.gridSize)
+      // 设置 canvas 样式
+      this.canvasStyle = {
+        width: this.canvasWidth + 'px',
+        height: this.canvasHeight + 'px'
+      }
+
+      console.log('Canvas:', this.canvasWidth, 'x', this.canvasHeight, 'Grid:', this.config.gridSize, 'Rows:', this.config.rows)
 
       this.$nextTick(() => {
         const query = uni.createSelectorQuery().in(this)
@@ -362,7 +432,7 @@ export default {
             this.canvas = res[0].node
             this.ctx = this.canvas.getContext('2d')
 
-            // 设置 canvas 物理像素尺寸
+            // 设置物理像素
             this.canvas.width = this.canvasWidth * this.dpr
             this.canvas.height = this.canvasHeight * this.dpr
             this.ctx.scale(this.dpr, this.dpr)
@@ -379,63 +449,101 @@ export default {
       this.path = []
       this.pathGrid = []
 
+      // 初始化网格
       for (let i = 0; i < rows; i++) {
         this.pathGrid.push(new Array(cols).fill(false))
       }
 
-      let currentRow = 0
-      let currentCol = 0
-      let direction = 1
+      // 生成S形路径（竖屏优化）
+      let x = 0
+      let y = 0
+      let dir = 1
 
-      // 起点
-      this.path.push({ x: gridSize / 2, y: gridSize / 2 })
-      this.pathGrid[0][0] = true
+      // 起点从左上角开始
+      this.path.push({ x: gridSize / 2, y: -gridSize / 2 }) // 入口在画布外
 
-      while (currentRow < rows - 1) {
+      while (y < rows) {
+        // 标记当前位置
+        if (y >= 0 && y < rows) {
+          this.pathGrid[y][x] = true
+          this.path.push({
+            x: x * gridSize + gridSize / 2,
+            y: y * gridSize + gridSize / 2
+          })
+        }
+
         // 水平移动
-        while ((direction === 1 && currentCol < cols - 1) || (direction === -1 && currentCol > 0)) {
-          currentCol += direction
-          if (currentRow < rows && currentCol >= 0 && currentCol < cols) {
-            this.pathGrid[currentRow][currentCol] = true
+        if ((dir === 1 && x < cols - 1) || (dir === -1 && x > 0)) {
+          x += dir
+        } else {
+          // 向下移动并转向
+          y++
+          if (y < rows) {
+            this.pathGrid[y][x] = true
             this.path.push({
-              x: currentCol * gridSize + gridSize / 2,
-              y: currentRow * gridSize + gridSize / 2
+              x: x * gridSize + gridSize / 2,
+              y: y * gridSize + gridSize / 2
             })
           }
+          y++
+          dir *= -1
         }
-
-        // 向下移动
-        for (let i = 0; i < 2 && currentRow < rows - 1; i++) {
-          currentRow++
-          if (currentRow < rows) {
-            this.pathGrid[currentRow][currentCol] = true
-            this.path.push({
-              x: currentCol * gridSize + gridSize / 2,
-              y: currentRow * gridSize + gridSize / 2
-            })
-          }
-        }
-        direction *= -1
       }
 
-      // 终点
+      // 终点在画布下方
       this.path.push({
         x: this.path[this.path.length - 1].x,
-        y: this.canvasHeight + 20
+        y: this.canvasHeight + gridSize / 2
       })
+
+      console.log('Path generated:', this.path.length, 'points')
     },
 
     selectTower(type) {
+      this.activeSkill = null
       const tower = this.towerList.find(t => t.type === type)
       if (tower && this.state.gold >= tower.cost) {
         this.selectedTower = this.selectedTower === type ? null : type
-        uni.showToast({
-          title: this.selectedTower ? `已选择${tower.name}` : '取消选择',
-          icon: 'none',
-          duration: 1000
-        })
       } else {
         uni.showToast({ title: '金币不足', icon: 'none' })
+      }
+    },
+
+    useSkill(skill) {
+      this.selectedTower = null
+      const costs = { bomb: 30, freeze: 40, heal: 50 }
+      if (this.state.gold >= costs[skill]) {
+        if (skill === 'freeze') {
+          // 立即冻结所有敌人
+          this.state.gold -= costs[skill]
+          this.state.globalFreeze = Date.now() + 3000
+          this.createGlobalEffect('#00BCD4')
+          uni.showToast({ title: '所有敌人已冻结!', icon: 'none' })
+        } else if (skill === 'heal') {
+          this.state.gold -= costs[skill]
+          this.state.lives = Math.min(this.state.lives + 5, this.gameMode === 'endless' ? 15 : 25)
+          this.createGlobalEffect('#E91E63')
+          uni.showToast({ title: '恢复5点生命!', icon: 'none' })
+        } else {
+          this.activeSkill = this.activeSkill === skill ? null : skill
+        }
+      } else {
+        uni.showToast({ title: '金币不足', icon: 'none' })
+      }
+    },
+
+    createGlobalEffect(color) {
+      for (let i = 0; i < 30; i++) {
+        this.particles.push({
+          x: Math.random() * this.canvasWidth,
+          y: Math.random() * this.canvasHeight,
+          vx: (Math.random() - 0.5) * 4,
+          vy: (Math.random() - 0.5) * 4,
+          life: 40,
+          maxLife: 40,
+          color: color,
+          size: 8
+        })
       }
     },
 
@@ -445,15 +553,11 @@ export default {
       const touch = e.touches[0]
       if (!touch) return
 
-      // 获取触摸坐标
       let x, y
-
-      // 小程序环境下 touch 对象直接提供相对于 canvas 的坐标
       if (typeof touch.x === 'number' && typeof touch.y === 'number') {
         x = touch.x
         y = touch.y
       } else {
-        // H5 环境需要手动计算
         const rect = e.currentTarget.getBoundingClientRect
           ? e.currentTarget.getBoundingClientRect()
           : { left: 0, top: 0 }
@@ -461,26 +565,24 @@ export default {
         y = touch.clientY - rect.top
       }
 
-      console.log('Touch at:', x, y, 'gridSize:', this.config.gridSize)
+      // 使用技能
+      if (this.activeSkill === 'bomb') {
+        this.useBombAt(x, y)
+        return
+      }
 
       const gridX = Math.floor(x / this.config.gridSize)
       const gridY = Math.floor(y / this.config.gridSize)
 
-      console.log('Grid:', gridX, gridY)
-
-      // 边界检查
       if (gridY < 0 || gridY >= this.config.rows || gridX < 0 || gridX >= this.config.cols) {
-        console.log('Out of bounds')
         return
       }
 
-      // 检查是否在路径上
       if (this.pathGrid[gridY] && this.pathGrid[gridY][gridX]) {
-        uni.showToast({ title: '不能在路径上建塔', icon: 'none', duration: 1000 })
+        uni.showToast({ title: '不能在路径上建塔', icon: 'none', duration: 800 })
         return
       }
 
-      // 检查是否已有塔
       const existingTower = this.towers.find(t => t.gridX === gridX && t.gridY === gridY)
 
       if (existingTower) {
@@ -488,8 +590,37 @@ export default {
       } else if (this.selectedTower) {
         this.tryBuildTower(gridX, gridY)
       } else {
-        uni.showToast({ title: '请先选择防御塔', icon: 'none', duration: 1000 })
+        uni.showToast({ title: '请先选择防御塔', icon: 'none', duration: 800 })
       }
+    },
+
+    useBombAt(x, y) {
+      this.state.gold -= 30
+      this.activeSkill = null
+
+      // 创建爆炸效果
+      const radius = this.config.gridSize * 1.5
+      for (let i = 0; i < 20; i++) {
+        const angle = (i / 20) * Math.PI * 2
+        this.particles.push({
+          x: x + Math.cos(angle) * radius * 0.5,
+          y: y + Math.sin(angle) * radius * 0.5,
+          vx: Math.cos(angle) * 3,
+          vy: Math.sin(angle) * 3,
+          life: 30,
+          maxLife: 30,
+          color: '#FF5722',
+          size: 8
+        })
+      }
+
+      // 对范围内敌人造成伤害
+      this.enemies.forEach(enemy => {
+        const dist = Math.sqrt(Math.pow(enemy.x - x, 2) + Math.pow(enemy.y - y, 2))
+        if (dist < radius) {
+          enemy.health -= 80
+        }
+      })
     },
 
     tryBuildTower(gridX, gridY) {
@@ -505,14 +636,10 @@ export default {
       this.showMathQuestion(difficulty, (correct) => {
         if (correct && this.pendingBuild) {
           this.buildTower(this.pendingBuild.gridX, this.pendingBuild.gridY)
-          // 建造成功特效
           this.createBuildEffect(
             this.pendingBuild.gridX * this.config.gridSize + this.config.gridSize / 2,
             this.pendingBuild.gridY * this.config.gridSize + this.config.gridSize / 2
           )
-          uni.showToast({ title: '建造成功！', icon: 'success' })
-        } else {
-          uni.showToast({ title: '答错了，建造失败', icon: 'none' })
         }
         this.pendingBuild = null
       })
@@ -523,7 +650,6 @@ export default {
       const config = this.towerTypes[this.selectedTower]
       const gridSize = this.config.gridSize
 
-      // 计算实际攻击范围（基于网格大小）
       const range = Math.floor(gridSize * (config.rangeMultiplier || 2))
       const splash = config.splashMultiplier ? Math.floor(gridSize * config.splashMultiplier) : 0
 
@@ -548,10 +674,9 @@ export default {
         projectileColor: config.projectileColor,
         splash: splash,
         slowEffect: config.slowEffect || 0,
-        slowDuration: config.slowDuration || 0
+        slowDuration: config.slowDuration || 0,
+        chainCount: config.chainCount || 0
       }
-
-      console.log('Built tower:', tower.type, 'at', gridX, gridY, 'range:', range)
 
       this.towers.push(tower)
       this.state.gold -= towerInfo.cost
@@ -565,16 +690,20 @@ export default {
           x, y,
           vx: Math.cos(angle) * 3,
           vy: Math.sin(angle) * 3,
-          life: 30,
-          maxLife: 30,
+          life: 25,
+          maxLife: 25,
           color: '#4CAF50',
-          size: 6
+          size: 5
         })
       }
     },
 
     tryUpgradeTower(tower) {
-      const upgradeCost = Math.floor(tower.cost * tower.level * 0.7)
+      if (tower.level >= 5) {
+        uni.showToast({ title: '已达最高等级', icon: 'none' })
+        return
+      }
+      const upgradeCost = Math.floor(tower.cost * tower.level * 0.6)
       if (this.state.gold < upgradeCost) {
         uni.showToast({ title: `升级需要 ${upgradeCost} 金币`, icon: 'none' })
         return
@@ -585,23 +714,18 @@ export default {
         if (correct) {
           this.upgradeTower(tower, upgradeCost)
           this.createBuildEffect(tower.x, tower.y)
-          uni.showToast({ title: `升级到 ${tower.level} 级！`, icon: 'success' })
-        } else {
-          uni.showToast({ title: '答错了，升级失败', icon: 'none' })
         }
       })
     },
 
     upgradeTower(tower, cost) {
       tower.level++
-      tower.damage = Math.floor(tower.damage * 1.3)
-      tower.range = Math.floor(tower.range * 1.15)
-      tower.fireRate = Math.floor(tower.fireRate * 0.9)
-      if (tower.splash) {
-        tower.splash = Math.floor(tower.splash * 1.1)
-      }
+      tower.damage = Math.floor(tower.damage * 1.35)
+      tower.range = Math.floor(tower.range * 1.1)
+      tower.fireRate = Math.floor(tower.fireRate * 0.88)
+      if (tower.splash) tower.splash = Math.floor(tower.splash * 1.1)
+      if (tower.chainCount) tower.chainCount++
       this.state.gold -= cost
-      console.log('Upgraded tower to level', tower.level, 'range:', tower.range)
     },
 
     showMathQuestion(difficulty, callback) {
@@ -615,7 +739,7 @@ export default {
       this.feedbackClass = ''
       this.selectedOption = null
 
-      if (Math.random() > 0.5 && difficulty <= 2) {
+      if (Math.random() > 0.4 && difficulty <= 2) {
         this.showOptions = true
         this.answerOptions = generateOptions(this.currentQuestion.answer)
       } else {
@@ -642,10 +766,10 @@ export default {
 
       if (isCorrect) {
         this.state.questionsCorrect++
-        this.feedback = '✓ 回答正确！'
+        this.feedback = '✓ 正确!'
         this.feedbackClass = 'correct'
       } else {
-        this.feedback = `✗ 答案是 ${this.currentQuestion.answer}`
+        this.feedback = `✗ 答案: ${this.currentQuestion.answer}`
         this.feedbackClass = 'wrong'
       }
 
@@ -654,7 +778,7 @@ export default {
         if (this.mathCallback) {
           this.mathCallback(isCorrect)
         }
-      }, isCorrect ? 600 : 1200)
+      }, isCorrect ? 500 : 1000)
     },
 
     skipQuestion() {
@@ -682,12 +806,14 @@ export default {
 
     getWaveConfig(wave) {
       const enemies = []
-      const baseCount = 3 + Math.floor(wave * 1.2)
+      const baseCount = 4 + Math.floor(wave * 1.5)
 
+      // 基础敌人
       for (let i = 0; i < baseCount; i++) {
         enemies.push('basic')
       }
 
+      // 快速敌人
       if (wave >= 2) {
         const fastCount = Math.floor(wave / 2)
         for (let i = 0; i < fastCount; i++) {
@@ -695,18 +821,36 @@ export default {
         }
       }
 
-      if (wave >= 4) {
-        const tankCount = Math.floor(wave / 3)
+      // 坦克敌人
+      if (wave >= 3) {
+        const tankCount = Math.floor((wave - 1) / 2)
         for (let i = 0; i < tankCount; i++) {
           enemies.push('tank')
         }
       }
 
+      // 治疗敌人
+      if (wave >= 4) {
+        const healerCount = Math.floor(wave / 4)
+        for (let i = 0; i < healerCount; i++) {
+          enemies.push('healer')
+        }
+      }
+
+      // 幽灵敌人
+      if (wave >= 5) {
+        const ghostCount = Math.floor(wave / 5)
+        for (let i = 0; i < ghostCount; i++) {
+          enemies.push('ghost')
+        }
+      }
+
+      // Boss
       if (wave % 5 === 0) {
         enemies.push('boss')
       }
 
-      return { enemies: shuffleArray(enemies), delay: 800 }
+      return { enemies: shuffleArray(enemies), delay: Math.max(400, 700 - wave * 20) }
     },
 
     spawnEnemies(waveConfig) {
@@ -732,7 +876,7 @@ export default {
       if (!this.path || this.path.length === 0) return
 
       const config = this.enemyTypes[type]
-      const waveMultiplier = 1 + (this.state.wave - 1) * 0.15
+      const waveMultiplier = 1 + (this.state.wave - 1) * 0.2
 
       const enemy = {
         id: Date.now() + Math.random(),
@@ -746,6 +890,9 @@ export default {
         gold: config.gold,
         pathIndex: 0,
         slowUntil: 0,
+        phaseShift: config.phaseShift || false,
+        healAura: config.healAura || false,
+        phaseTimer: 0,
         ...config
       }
 
@@ -765,6 +912,7 @@ export default {
 
     update() {
       const now = Date.now()
+      const globalFrozen = this.state.globalFreeze > now
 
       // 更新粒子
       for (let i = this.particles.length - 1; i >= 0; i--) {
@@ -777,14 +925,41 @@ export default {
         }
       }
 
+      // 治疗光环效果
+      this.enemies.forEach(healer => {
+        if (healer.healAura) {
+          this.enemies.forEach(enemy => {
+            if (enemy.id !== healer.id) {
+              const dist = Math.sqrt(Math.pow(enemy.x - healer.x, 2) + Math.pow(enemy.y - healer.y, 2))
+              if (dist < this.config.gridSize * 1.5) {
+                enemy.health = Math.min(enemy.maxHealth, enemy.health + 0.1)
+              }
+            }
+          })
+        }
+      })
+
       // 更新敌人
       for (let i = this.enemies.length - 1; i >= 0; i--) {
         const enemy = this.enemies[i]
 
-        if (enemy.slowUntil > now) {
-          enemy.speed = enemy.baseSpeed * 0.5
+        // 全局冻结或减速效果
+        if (globalFrozen) {
+          enemy.speed = 0
+        } else if (enemy.slowUntil > now) {
+          enemy.speed = enemy.baseSpeed * 0.4
         } else {
           enemy.speed = enemy.baseSpeed
+        }
+
+        // 幽灵相位移动
+        if (enemy.phaseShift) {
+          enemy.phaseTimer = (enemy.phaseTimer || 0) + 1
+          if (enemy.phaseTimer % 120 < 60) {
+            enemy.isPhased = true
+          } else {
+            enemy.isPhased = false
+          }
         }
 
         if (enemy.pathIndex < this.path.length - 1) {
@@ -822,6 +997,9 @@ export default {
         let minDist = tower.range
 
         this.enemies.forEach(enemy => {
+          // 幽灵相位时无法被攻击
+          if (enemy.isPhased) return
+
           const dist = Math.sqrt(Math.pow(enemy.x - tower.x, 2) + Math.pow(enemy.y - tower.y, 2))
           if (dist < minDist) {
             minDist = dist
@@ -846,7 +1024,7 @@ export default {
         const proj = this.projectiles[i]
         const target = this.enemies.find(e => e.id === proj.targetId)
 
-        if (!target) {
+        if (!target || target.isPhased) {
           this.createHitEffect(proj.x, proj.y, proj.color)
           this.projectiles.splice(i, 1)
           continue
@@ -856,14 +1034,14 @@ export default {
         const dy = target.y - proj.y
         const dist = Math.sqrt(dx * dx + dy * dy)
 
-        if (dist < 12) {
+        if (dist < 15) {
           target.health -= proj.damage
           if (proj.slowEffect) {
             target.slowUntil = now + proj.slowDuration
           }
           if (proj.splash) {
             this.enemies.forEach(enemy => {
-              if (enemy.id !== target.id) {
+              if (enemy.id !== target.id && !enemy.isPhased) {
                 const splashDist = Math.sqrt(Math.pow(enemy.x - target.x, 2) + Math.pow(enemy.y - target.y, 2))
                 if (splashDist < proj.splash) {
                   enemy.health -= proj.damage * 0.5
@@ -871,6 +1049,10 @@ export default {
               }
             })
             this.createSplashEffect(target.x, target.y, proj.splash)
+          }
+          // 连锁攻击
+          if (proj.chainCount > 0) {
+            this.chainAttack(target, proj.damage * 0.7, proj.chainCount - 1, proj.color)
           }
           this.createHitEffect(proj.x, proj.y, proj.color)
           this.projectiles.splice(i, 1)
@@ -882,16 +1064,57 @@ export default {
 
       // 检查波次完成
       if (this.enemies.length === 0 && !this.state.waveInProgress && !this.state.isGameOver) {
+        // 检查胜利条件
+        if (this.gameMode === 'normal' && this.state.wave >= 10) {
+          this.gameOver(true)
+          return
+        }
+
         this.state.wave++
-        this.state.gold += 30 + this.state.wave * 10
+        this.state.gold += 20 + this.state.wave * 5
         this.state.waveInProgress = true
 
         setTimeout(() => {
           if (!this.state.isGameOver) {
-            uni.showToast({ title: `第 ${this.state.wave} 波来袭！`, icon: 'none' })
             this.startWave()
           }
         }, 2000)
+      }
+    },
+
+    chainAttack(source, damage, remaining, color) {
+      if (remaining <= 0) return
+
+      let nearestEnemy = null
+      let minDist = this.config.gridSize * 2
+
+      this.enemies.forEach(enemy => {
+        if (enemy.id !== source.id && !enemy.isPhased) {
+          const dist = Math.sqrt(Math.pow(enemy.x - source.x, 2) + Math.pow(enemy.y - source.y, 2))
+          if (dist < minDist) {
+            minDist = dist
+            nearestEnemy = enemy
+          }
+        }
+      })
+
+      if (nearestEnemy) {
+        nearestEnemy.health -= damage
+        // 绘制连锁线
+        this.particles.push({
+          x: source.x,
+          y: source.y,
+          vx: 0,
+          vy: 0,
+          life: 8,
+          maxLife: 8,
+          color: color,
+          size: 3,
+          isChain: true,
+          targetX: nearestEnemy.x,
+          targetY: nearestEnemy.y
+        })
+        this.chainAttack(nearestEnemy, damage * 0.7, remaining - 1, color)
       }
     },
 
@@ -902,25 +1125,26 @@ export default {
         y: tower.y,
         targetId: target.id,
         damage: tower.damage,
-        speed: tower.projectileSpeed || 8,
+        speed: tower.projectileSpeed || 10,
         color: tower.projectileColor || tower.color,
         splash: tower.splash || 0,
         slowEffect: tower.slowEffect || 0,
         slowDuration: tower.slowDuration || 0,
+        chainCount: tower.chainCount || 0,
         size: tower.splash ? 6 : 4
       })
     },
 
     createHitEffect(x, y, color) {
-      for (let i = 0; i < 6; i++) {
+      for (let i = 0; i < 5; i++) {
         const angle = Math.random() * Math.PI * 2
         const speed = 1 + Math.random() * 2
         this.particles.push({
           x, y,
           vx: Math.cos(angle) * speed,
           vy: Math.sin(angle) * speed,
-          life: 15,
-          maxLife: 15,
+          life: 12,
+          maxLife: 12,
           color: color,
           size: 3
         })
@@ -928,15 +1152,15 @@ export default {
     },
 
     createDeathEffect(x, y, color) {
-      for (let i = 0; i < 10; i++) {
+      for (let i = 0; i < 8; i++) {
         const angle = Math.random() * Math.PI * 2
-        const speed = 2 + Math.random() * 3
+        const speed = 2 + Math.random() * 2
         this.particles.push({
           x, y,
           vx: Math.cos(angle) * speed,
           vy: Math.sin(angle) * speed,
-          life: 25,
-          maxLife: 25,
+          life: 20,
+          maxLife: 20,
           color: color,
           size: 5
         })
@@ -944,15 +1168,15 @@ export default {
     },
 
     createSplashEffect(x, y, radius) {
-      for (let i = 0; i < 16; i++) {
-        const angle = (i / 16) * Math.PI * 2
+      for (let i = 0; i < 12; i++) {
+        const angle = (i / 12) * Math.PI * 2
         this.particles.push({
-          x: x + Math.cos(angle) * radius * 0.5,
-          y: y + Math.sin(angle) * radius * 0.5,
+          x: x + Math.cos(angle) * radius * 0.3,
+          y: y + Math.sin(angle) * radius * 0.3,
           vx: Math.cos(angle) * 1.5,
           vy: Math.sin(angle) * 1.5,
-          life: 20,
-          maxLife: 20,
+          life: 15,
+          maxLife: 15,
           color: '#E040FB',
           size: 4
         })
@@ -966,11 +1190,11 @@ export default {
       const { gridSize, cols, rows } = this.config
 
       // 清空画布
-      ctx.fillStyle = '#2d5016'
+      ctx.fillStyle = '#1a472a'
       ctx.fillRect(0, 0, this.canvasWidth, this.canvasHeight)
 
       // 绘制网格
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)'
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)'
       ctx.lineWidth = 1
       for (let i = 0; i <= cols; i++) {
         ctx.beginPath()
@@ -986,41 +1210,46 @@ export default {
       }
 
       // 绘制路径
-      ctx.fillStyle = '#6B5344'
-      for (let row = 0; row < this.pathGrid.length; row++) {
+      ctx.fillStyle = '#5D4037'
+      for (let row = 0; row < rows; row++) {
         for (let col = 0; col < cols; col++) {
           if (this.pathGrid[row] && this.pathGrid[row][col]) {
-            ctx.fillRect(col * gridSize + 1, row * gridSize + 1, gridSize - 2, gridSize - 2)
+            ctx.fillRect(col * gridSize + 2, row * gridSize + 2, gridSize - 4, gridSize - 4)
           }
         }
       }
 
-      // 绘制可放置预览
+      // 绘制可放置区域
       if (this.selectedTower) {
-        ctx.fillStyle = 'rgba(76, 175, 80, 0.4)'
+        ctx.fillStyle = 'rgba(76, 175, 80, 0.35)'
         for (let row = 0; row < rows; row++) {
           for (let col = 0; col < cols; col++) {
             if (!this.pathGrid[row] || !this.pathGrid[row][col]) {
               const hasTower = this.towers.some(t => t.gridX === col && t.gridY === row)
               if (!hasTower) {
-                ctx.fillRect(col * gridSize + 2, row * gridSize + 2, gridSize - 4, gridSize - 4)
+                ctx.fillRect(col * gridSize + 3, row * gridSize + 3, gridSize - 6, gridSize - 6)
               }
             }
           }
         }
       }
 
+      // 绘制炸弹瞄准区域
+      if (this.activeSkill === 'bomb') {
+        ctx.fillStyle = 'rgba(255, 87, 34, 0.3)'
+        ctx.fillRect(0, 0, this.canvasWidth, this.canvasHeight)
+      }
+
       // 绘制防御塔
       this.towers.forEach(tower => {
-        const size = gridSize - 8
+        const size = gridSize - 6
 
-        // 攻击范围（选中时显示）
-        if (this.selectedTower === null) {
-          ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)'
-          ctx.beginPath()
-          ctx.arc(tower.x, tower.y, tower.range, 0, Math.PI * 2)
-          ctx.stroke()
-        }
+        // 攻击范围
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)'
+        ctx.lineWidth = 1
+        ctx.beginPath()
+        ctx.arc(tower.x, tower.y, tower.range, 0, Math.PI * 2)
+        ctx.stroke()
 
         // 塔底座
         ctx.fillStyle = tower.color
@@ -1028,43 +1257,57 @@ export default {
         ctx.arc(tower.x, tower.y, size / 2, 0, Math.PI * 2)
         ctx.fill()
 
-        // 塔的朝向指示
+        // 朝向指示
         if (tower.target) {
           ctx.strokeStyle = tower.projectileColor || '#fff'
-          ctx.lineWidth = 3
+          ctx.lineWidth = 2
           ctx.beginPath()
           ctx.moveTo(tower.x, tower.y)
           ctx.lineTo(
-            tower.x + Math.cos(tower.angle) * (size / 2 + 5),
-            tower.y + Math.sin(tower.angle) * (size / 2 + 5)
+            tower.x + Math.cos(tower.angle) * (size / 2 + 4),
+            tower.y + Math.sin(tower.angle) * (size / 2 + 4)
           )
           ctx.stroke()
         }
 
-        // 塔的 emoji
-        ctx.font = `${size * 0.55}px Arial`
+        // 塔 emoji
+        ctx.font = `${size * 0.5}px Arial`
         ctx.textAlign = 'center'
         ctx.textBaseline = 'middle'
         ctx.fillText(tower.emoji, tower.x, tower.y)
 
-        // 等级标识
+        // 等级
         if (tower.level > 1) {
           ctx.fillStyle = '#FFD700'
-          ctx.font = 'bold 10px Arial'
-          ctx.fillText(`Lv${tower.level}`, tower.x, tower.y - size / 2 - 6)
+          ctx.font = 'bold 9px Arial'
+          ctx.fillText(`Lv${tower.level}`, tower.x, tower.y - size / 2 - 5)
         }
       })
 
       // 绘制敌人
       this.enemies.forEach(enemy => {
-        const size = gridSize * 0.6
+        const size = gridSize * 0.55
 
-        // 减速效果光环
+        // 幽灵相位效果
+        if (enemy.isPhased) {
+          ctx.globalAlpha = 0.4
+        }
+
+        // 减速效果
         if (enemy.slowUntil > Date.now()) {
           ctx.fillStyle = 'rgba(0, 188, 212, 0.3)'
           ctx.beginPath()
-          ctx.arc(enemy.x, enemy.y, size / 2 + 4, 0, Math.PI * 2)
+          ctx.arc(enemy.x, enemy.y, size / 2 + 3, 0, Math.PI * 2)
           ctx.fill()
+        }
+
+        // 治疗光环
+        if (enemy.healAura) {
+          ctx.strokeStyle = 'rgba(139, 195, 74, 0.5)'
+          ctx.lineWidth = 2
+          ctx.beginPath()
+          ctx.arc(enemy.x, enemy.y, this.config.gridSize * 1.5, 0, Math.PI * 2)
+          ctx.stroke()
         }
 
         // 敌人身体
@@ -1074,21 +1317,22 @@ export default {
         ctx.fill()
 
         // 敌人 emoji
-        ctx.font = `${size * 0.7}px Arial`
+        ctx.font = `${size * 0.65}px Arial`
         ctx.textAlign = 'center'
         ctx.textBaseline = 'middle'
         ctx.fillText(enemy.emoji, enemy.x, enemy.y)
 
-        // 血条背景
-        const hpWidth = size * 1.2
-        const hpHeight = 4
+        ctx.globalAlpha = 1
+
+        // 血条
+        const hpWidth = size * 1.1
+        const hpHeight = 3
         const hpX = enemy.x - hpWidth / 2
-        const hpY = enemy.y - size / 2 - 8
+        const hpY = enemy.y - size / 2 - 6
 
         ctx.fillStyle = '#333'
         ctx.fillRect(hpX, hpY, hpWidth, hpHeight)
 
-        // 血条
         const hpPercent = Math.max(0, enemy.health / enemy.maxHealth)
         ctx.fillStyle = hpPercent > 0.5 ? '#4CAF50' : hpPercent > 0.25 ? '#FFC107' : '#F44336'
         ctx.fillRect(hpX, hpY, hpWidth * hpPercent, hpHeight)
@@ -1096,29 +1340,38 @@ export default {
 
       // 绘制子弹
       this.projectiles.forEach(proj => {
-        // 子弹拖尾
-        ctx.fillStyle = proj.color + '66'
-        ctx.beginPath()
-        ctx.arc(proj.x, proj.y, proj.size + 2, 0, Math.PI * 2)
-        ctx.fill()
-
-        // 子弹本体
         ctx.fillStyle = proj.color
         ctx.beginPath()
         ctx.arc(proj.x, proj.y, proj.size, 0, Math.PI * 2)
         ctx.fill()
       })
 
-      // 绘制粒子特效
+      // 绘制粒子
       this.particles.forEach(p => {
         const alpha = p.life / p.maxLife
         ctx.globalAlpha = alpha
-        ctx.fillStyle = p.color
-        ctx.beginPath()
-        ctx.arc(p.x, p.y, p.size * alpha, 0, Math.PI * 2)
-        ctx.fill()
+
+        if (p.isChain) {
+          ctx.strokeStyle = p.color
+          ctx.lineWidth = 2
+          ctx.beginPath()
+          ctx.moveTo(p.x, p.y)
+          ctx.lineTo(p.targetX, p.targetY)
+          ctx.stroke()
+        } else {
+          ctx.fillStyle = p.color
+          ctx.beginPath()
+          ctx.arc(p.x, p.y, p.size * alpha, 0, Math.PI * 2)
+          ctx.fill()
+        }
       })
       ctx.globalAlpha = 1
+
+      // 全局冻结效果
+      if (this.state.globalFreeze > Date.now()) {
+        ctx.fillStyle = 'rgba(0, 188, 212, 0.1)'
+        ctx.fillRect(0, 0, this.canvasWidth, this.canvasHeight)
+      }
     },
 
     pauseGame() {
@@ -1132,8 +1385,7 @@ export default {
     },
 
     toggleSpeed() {
-      this.state.gameSpeed = this.state.gameSpeed === 1 ? 2 : 1
-      uni.showToast({ title: `${this.state.gameSpeed}x 速度`, icon: 'none', duration: 800 })
+      this.state.gameSpeed = this.state.gameSpeed >= 2 ? 1 : this.state.gameSpeed + 0.5
     },
 
     restartGame() {
@@ -1142,7 +1394,7 @@ export default {
       if (this.animationId) {
         cancelAnimationFrame(this.animationId)
       }
-      this.startGame()
+      this.startGame(this.gameMode)
     },
 
     quitGame() {
@@ -1156,6 +1408,8 @@ export default {
 
     gameOver(win) {
       this.state.isGameOver = true
+      this.saveHighScore()
+
       const accuracy = this.state.questionsAnswered > 0
         ? Math.round((this.state.questionsCorrect / this.state.questionsAnswered) * 100)
         : 0
@@ -1169,21 +1423,6 @@ export default {
       }
 
       this.showGameOverModal = true
-    },
-
-    shareResult() {
-      const text = `🏰 我在【数学塔防】中坚守了 ${this.gameResult.wave} 波！答题正确率 ${this.gameResult.accuracy}%！快来挑战吧！`
-
-      // #ifdef H5
-      if (navigator.clipboard) {
-        navigator.clipboard.writeText(text)
-        uni.showToast({ title: '已复制，快去分享吧', icon: 'none' })
-      }
-      // #endif
-
-      // #ifdef MP-WEIXIN
-      uni.showToast({ title: '长按保存并分享', icon: 'none' })
-      // #endif
     }
   },
 
@@ -1198,18 +1437,18 @@ export default {
 <style scoped>
 .game-container {
   width: 100%;
-  min-height: 100vh;
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  height: 100vh;
+  background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
+  overflow: hidden;
 }
 
 .screen {
   width: 100%;
-  min-height: 100vh;
+  height: 100vh;
   display: flex;
   flex-direction: column;
 }
 
-/* 菜单样式 */
 .menu-screen {
   justify-content: center;
   align-items: center;
@@ -1222,32 +1461,32 @@ export default {
 
 .title {
   display: block;
-  font-size: 56rpx;
+  font-size: 52rpx;
   font-weight: bold;
-  color: #ffffff;
+  color: #fff;
   text-shadow: 0 0 20px rgba(76, 175, 80, 0.5);
 }
 
 .subtitle {
   display: block;
-  font-size: 28rpx;
-  color: #a0a0a0;
-  margin-top: 16rpx;
-  margin-bottom: 60rpx;
+  font-size: 26rpx;
+  color: #888;
+  margin-top: 12rpx;
+  margin-bottom: 50rpx;
 }
 
 .menu-buttons {
   display: flex;
   flex-direction: column;
-  gap: 24rpx;
-  margin-bottom: 40rpx;
+  gap: 20rpx;
+  margin-bottom: 30rpx;
 }
 
 .btn {
-  padding: 24rpx 60rpx;
-  font-size: 32rpx;
+  padding: 22rpx 50rpx;
+  font-size: 30rpx;
   border: none;
-  border-radius: 24rpx;
+  border-radius: 20rpx;
   font-weight: bold;
 }
 
@@ -1266,96 +1505,128 @@ export default {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 16rpx;
+  gap: 12rpx;
+  margin-bottom: 30rpx;
 }
 
 .tag {
   background: rgba(33, 150, 243, 0.2);
   color: #2196F3;
-  padding: 12rpx 24rpx;
-  border-radius: 30rpx;
-  font-size: 24rpx;
+  padding: 10rpx 20rpx;
+  border-radius: 24rpx;
+  font-size: 22rpx;
 }
 
-/* 游戏界面样式 */
+.high-score {
+  margin-top: 20rpx;
+  color: #FFD700;
+  font-size: 26rpx;
+}
+
+/* 游戏界面 */
 .game-screen {
   height: 100vh;
   overflow: hidden;
-  display: flex;
-  flex-direction: column;
 }
 
 .game-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16rpx 24rpx;
-  padding-top: calc(16rpx + constant(safe-area-inset-top));
-  padding-top: calc(16rpx + env(safe-area-inset-top));
-  background: rgba(0, 0, 0, 0.6);
+  padding: 12rpx 20rpx;
+  padding-top: calc(12rpx + env(safe-area-inset-top));
+  background: rgba(0, 0, 0, 0.7);
   flex-shrink: 0;
 }
 
 .info-left, .info-right {
   display: flex;
-  gap: 20rpx;
+  gap: 16rpx;
   align-items: center;
 }
 
+.info-center {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+}
+
 .lives, .gold, .wave {
-  font-size: 28rpx;
+  font-size: 26rpx;
   font-weight: bold;
-  color: #ffffff;
+  color: #fff;
+}
+
+.mode-tag {
+  font-size: 18rpx;
+  background: #E91E63;
+  color: white;
+  padding: 2rpx 10rpx;
+  border-radius: 10rpx;
 }
 
 .btn-icon {
-  font-size: 36rpx;
-  padding: 8rpx;
+  font-size: 32rpx;
+  padding: 6rpx 10rpx;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 8rpx;
 }
 
-.canvas-wrapper {
+.canvas-container {
   flex: 1;
   display: flex;
   align-items: flex-start;
   justify-content: center;
   overflow: hidden;
-  min-height: 0;
+  background: #1a472a;
 }
 
 .game-canvas {
-  background: #2d5016;
   display: block;
 }
 
-.tip-bar {
-  padding: 12rpx 24rpx;
-  background: rgba(0, 0, 0, 0.5);
-  height: 40px;
+.skill-bar {
   display: flex;
-  align-items: center;
   justify-content: center;
+  gap: 30rpx;
+  padding: 10rpx;
+  background: rgba(0, 0, 0, 0.6);
   flex-shrink: 0;
 }
 
-.tip-bar.selected-tip {
-  background: rgba(76, 175, 80, 0.3);
+.skill-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8rpx 20rpx;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 12rpx;
+  border: 2rpx solid transparent;
 }
 
-.tip-text {
-  font-size: 24rpx;
-  color: #a0a0a0;
+.skill-btn.active {
+  border-color: #FF5722;
+  background: rgba(255, 87, 34, 0.3);
 }
 
-.selected-tip .tip-text {
-  color: #4CAF50;
+.skill-btn.disabled {
+  opacity: 0.4;
+}
+
+.skill-icon {
+  font-size: 32rpx;
+}
+
+.skill-cost {
+  font-size: 18rpx;
+  color: #FFD700;
 }
 
 .tower-bar {
   display: flex;
   justify-content: space-around;
-  padding: 12rpx 8rpx;
-  padding-bottom: calc(12rpx + constant(safe-area-inset-bottom));
-  padding-bottom: calc(12rpx + env(safe-area-inset-bottom));
+  padding: 10rpx 6rpx;
+  padding-bottom: calc(10rpx + env(safe-area-inset-bottom));
   background: rgba(0, 0, 0, 0.8);
   flex-shrink: 0;
 }
@@ -1364,18 +1635,16 @@ export default {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 12rpx 16rpx;
-  background: #16213e;
-  border-radius: 16rpx;
-  border: 3rpx solid transparent;
-  min-width: 140rpx;
-  transition: all 0.2s;
+  padding: 8rpx 10rpx;
+  background: #1a1a2e;
+  border-radius: 12rpx;
+  border: 2rpx solid transparent;
+  min-width: 100rpx;
 }
 
 .tower-slot.selected {
   border-color: #4CAF50;
-  background: rgba(76, 175, 80, 0.2);
-  transform: scale(1.05);
+  background: rgba(76, 175, 80, 0.25);
 }
 
 .tower-slot.disabled {
@@ -1383,22 +1652,21 @@ export default {
 }
 
 .tower-icon {
-  font-size: 40rpx;
+  font-size: 32rpx;
 }
 
 .tower-name {
-  font-size: 20rpx;
-  color: #ffffff;
-  margin-top: 4rpx;
+  font-size: 18rpx;
+  color: #fff;
+  margin-top: 2rpx;
 }
 
 .tower-cost {
-  font-size: 20rpx;
+  font-size: 16rpx;
   color: #FFD700;
-  margin-top: 4rpx;
 }
 
-/* 模态框样式 */
+/* 模态框 */
 .modal {
   position: fixed;
   top: 0;
@@ -1414,95 +1682,99 @@ export default {
 
 .modal-content {
   background: #16213e;
-  border-radius: 24rpx;
-  padding: 40rpx;
+  border-radius: 20rpx;
+  padding: 36rpx;
   width: 85%;
-  max-width: 600rpx;
+  max-width: 580rpx;
   text-align: center;
 }
 
 .modal-title {
   display: block;
-  font-size: 40rpx;
+  font-size: 38rpx;
   font-weight: bold;
-  color: #ffffff;
-  margin-bottom: 32rpx;
+  color: #fff;
+  margin-bottom: 28rpx;
 }
 
 .modal-buttons {
   display: flex;
   flex-direction: column;
-  gap: 16rpx;
-  margin-top: 32rpx;
+  gap: 14rpx;
+  margin-top: 28rpx;
 }
 
-/* 数学题样式 */
+/* 数学题 */
+.math-modal {
+  max-width: 620rpx;
+}
+
 .math-question {
-  margin-bottom: 32rpx;
+  margin-bottom: 28rpx;
 }
 
 .question-type {
   display: inline-block;
-  font-size: 24rpx;
+  font-size: 22rpx;
   color: #2196F3;
-  background: rgba(33, 150, 243, 0.1);
-  padding: 8rpx 24rpx;
-  border-radius: 30rpx;
-  margin-bottom: 24rpx;
+  background: rgba(33, 150, 243, 0.15);
+  padding: 6rpx 20rpx;
+  border-radius: 24rpx;
+  margin-bottom: 20rpx;
 }
 
 .question-text {
   display: block;
-  font-size: 36rpx;
+  font-size: 34rpx;
   font-weight: bold;
-  color: #ffffff;
+  color: #fff;
   line-height: 1.5;
 }
 
 .answer-area {
-  margin-bottom: 16rpx;
+  margin-bottom: 14rpx;
 }
 
 .answer-input {
   width: 100%;
-  padding: 24rpx;
-  font-size: 36rpx;
+  padding: 20rpx;
+  font-size: 34rpx;
   text-align: center;
   background: rgba(0, 0, 0, 0.3);
   border: 2rpx solid rgba(255, 255, 255, 0.2);
-  border-radius: 16rpx;
-  color: #ffffff;
+  border-radius: 14rpx;
+  color: #fff;
 }
 
 .answer-options {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 16rpx;
+  gap: 14rpx;
 }
 
 .option-btn {
-  padding: 24rpx;
-  font-size: 32rpx;
+  padding: 20rpx;
+  font-size: 30rpx;
   background: rgba(255, 255, 255, 0.1);
   border: 2rpx solid rgba(255, 255, 255, 0.2);
-  border-radius: 16rpx;
-  color: #ffffff;
+  border-radius: 14rpx;
+  color: #fff;
 }
 
 .option-btn.correct {
-  background: rgba(76, 175, 80, 0.3);
+  background: rgba(76, 175, 80, 0.4);
   border-color: #4CAF50;
 }
 
 .option-btn.wrong {
-  background: rgba(244, 67, 54, 0.3);
+  background: rgba(244, 67, 54, 0.4);
   border-color: #F44336;
 }
 
 .feedback {
   display: block;
-  margin-top: 24rpx;
-  font-size: 28rpx;
+  margin-top: 20rpx;
+  font-size: 26rpx;
 }
 
 .feedback.correct {
@@ -1515,26 +1787,26 @@ export default {
 
 /* 游戏统计 */
 .game-stats {
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 16rpx;
-  padding: 24rpx;
-  margin: 24rpx 0;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 14rpx;
+  padding: 20rpx;
+  margin: 20rpx 0;
 }
 
 .stat-row {
   display: flex;
   justify-content: space-between;
-  padding: 12rpx 0;
+  padding: 10rpx 0;
   border-bottom: 1rpx solid rgba(255, 255, 255, 0.1);
-  color: #ffffff;
-  font-size: 28rpx;
+  color: #fff;
+  font-size: 26rpx;
 }
 
 .stat-row:last-child {
   border-bottom: none;
 }
 
-/* 帮助内容 */
+/* 帮助 */
 .help-content {
   text-align: left;
   max-height: 70vh;
@@ -1542,22 +1814,22 @@ export default {
 }
 
 .help-section {
-  margin-bottom: 24rpx;
+  margin-bottom: 20rpx;
 }
 
 .help-title {
   display: block;
-  font-size: 30rpx;
+  font-size: 28rpx;
   font-weight: bold;
   color: #4CAF50;
-  margin-bottom: 12rpx;
+  margin-bottom: 10rpx;
 }
 
 .help-text {
   display: block;
-  font-size: 26rpx;
-  color: #a0a0a0;
-  margin-bottom: 8rpx;
-  line-height: 1.6;
+  font-size: 24rpx;
+  color: #999;
+  margin-bottom: 6rpx;
+  line-height: 1.5;
 }
 </style>
