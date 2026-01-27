@@ -334,80 +334,14 @@ export default {
     handleResize() {
       // 仅在游戏界面且画布已就绪时重新计算
       if (this.screen !== 'game' || !this.isCanvasReady) return
-      this.adaptCanvas()
-    },
-
-    // 游戏通用适配方法：基于容器实际尺寸计算
-    adaptCanvas() {
-      const query = uni.createSelectorQuery().in(this)
-      query.select('#canvasContainer').boundingClientRect()
-      query.exec((res) => {
-        if (!res || !res[0]) {
-          console.error('Container not found')
-          return
-        }
-
-        const container = res[0]
-        const containerW = Math.floor(container.width)
-        const containerH = Math.floor(container.height)
-
-        if (containerW <= 0 || containerH <= 0) {
-          console.error('Invalid container size:', containerW, containerH)
-          return
-        }
-
-        // 获取设备像素比
-        const sysInfo = uni.getSystemInfoSync()
-        this.dpr = sysInfo.pixelRatio || 2
-
-        // 限制 DPR 避免过高的内存占用
-        if (this.dpr > 3) this.dpr = 3
-
-        // 保存容器尺寸
-        this.containerWidth = containerW
-        this.containerHeight = containerH
-
-        // 固定列数，根据容器宽度计算网格大小
-        this.config.cols = 8
-        this.config.gridSize = Math.floor(containerW / this.config.cols)
-
-        // 根据网格大小计算行数（向下取整保证不超出容器）
-        this.config.rows = Math.floor(containerH / this.config.gridSize)
-
-        // 限制行数范围
-        if (this.config.rows < 6) this.config.rows = 6
-        if (this.config.rows > 16) this.config.rows = 16
-
-        // 计算实际画布尺寸（基于网格）
-        this.canvasWidth = this.config.cols * this.config.gridSize
-        this.canvasHeight = this.config.rows * this.config.gridSize
-
-        // 设置 canvas 物理尺寸
-        if (this.canvas) {
-          // 设置 CSS 尺寸
-          this.canvas.style.width = this.canvasWidth + 'px'
-          this.canvas.style.height = this.canvasHeight + 'px'
-
-          // 设置物理像素尺寸
-          this.canvas.width = Math.floor(this.canvasWidth * this.dpr)
-          this.canvas.height = Math.floor(this.canvasHeight * this.dpr)
-
-          // 重置并设置缩放
-          if (this.ctx) {
-            this.ctx.setTransform(1, 0, 0, 1, 0, 0)
-            this.ctx.scale(this.dpr, this.dpr)
-          }
-        }
-
-        console.log('[Adapt] Container:', containerW, 'x', containerH,
-          'Canvas:', this.canvasWidth, 'x', this.canvasHeight,
-          'Grid:', this.config.gridSize, 'Rows:', this.config.rows, 'DPR:', this.dpr)
-      })
+      // 使用 resizeCanvas 而不是 adaptCanvas，因为需要更新游戏对象位置
+      this.resizeCanvas()
     },
 
     // 初始化时的适配（包含塔和敌人位置更新）
     resizeCanvas() {
       const oldGridSize = this.config.gridSize
+      const oldRows = this.config.rows
 
       const query = uni.createSelectorQuery().in(this)
       query.select('#canvasContainer').boundingClientRect()
@@ -440,28 +374,41 @@ export default {
           this.ctx.scale(this.dpr, this.dpr)
         }
 
-        // 如果网格大小变化，更新游戏对象位置
-        if (oldGridSize > 0 && oldGridSize !== this.config.gridSize) {
-          const scale = this.config.gridSize / oldGridSize
+        // 如果网格大小或行数变化，更新游戏对象位置
+        const gridChanged = oldGridSize > 0 && oldGridSize !== this.config.gridSize
+        const rowsChanged = oldRows > 0 && oldRows !== this.config.rows
 
-          this.towers.forEach(tower => {
-            tower.x = tower.gridX * this.config.gridSize + this.config.gridSize / 2
-            tower.y = tower.gridY * this.config.gridSize + this.config.gridSize / 2
-            tower.range = Math.floor(tower.range * scale)
-          })
-
+        if (gridChanged || rowsChanged) {
+          // 重新生成路径
           this.generatePath()
 
+          // 更新塔的位置
+          this.towers.forEach(tower => {
+            // 检查塔是否还在有效范围内
+            if (tower.gridY >= this.config.rows) {
+              // 塔超出范围，移除
+              const idx = this.towers.indexOf(tower)
+              if (idx > -1) this.towers.splice(idx, 1)
+            } else {
+              tower.x = tower.gridX * this.config.gridSize + this.config.gridSize / 2
+              tower.y = tower.gridY * this.config.gridSize + this.config.gridSize / 2
+              // 重新计算攻击范围
+              const config = this.towerTypes[tower.type]
+              tower.range = Math.floor(this.config.gridSize * (config.rangeMultiplier || 2) * Math.pow(1.1, tower.level - 1))
+            }
+          })
+
+          // 更新敌人位置到最近的路径点
           this.enemies.forEach(enemy => {
             if (enemy.pathIndex < this.path.length) {
-              const pathPoint = this.path[enemy.pathIndex]
+              const pathPoint = this.path[Math.min(enemy.pathIndex, this.path.length - 1)]
               enemy.x = pathPoint.x
               enemy.y = pathPoint.y
             }
           })
         }
 
-        console.log('[Resize] Canvas:', this.canvasWidth, 'x', this.canvasHeight)
+        console.log('[Resize] Canvas:', this.canvasWidth, 'x', this.canvasHeight, 'Grid:', this.config.gridSize, 'Rows:', this.config.rows)
       })
     },
 
@@ -597,14 +544,6 @@ export default {
         this.generatePath()
         this.startWave()
         this.gameLoop()
-
-        // 延迟再次适配，确保最终尺寸正确
-        setTimeout(() => {
-          if (this.isCanvasReady) {
-            this.adaptCanvas()
-            this.generatePath()
-          }
-        }, 500)
       })
     },
 
