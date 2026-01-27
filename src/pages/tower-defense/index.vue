@@ -1242,7 +1242,7 @@ export default {
 
       // 绘制防御塔
       this.towers.forEach(tower => {
-        const size = gridSize - 6
+        const size = gridSize * 0.6
 
         // 攻击范围
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)'
@@ -1286,7 +1286,7 @@ export default {
 
       // 绘制敌人
       this.enemies.forEach(enemy => {
-        const size = gridSize * 0.55
+        const size = gridSize * 0.4
 
         // 幽灵相位效果
         if (enemy.isPhased) {
