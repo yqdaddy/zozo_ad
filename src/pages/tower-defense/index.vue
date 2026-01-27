@@ -336,7 +336,7 @@ export default {
       this.resizeCanvas()
     },
 
-    resizeCanvas() {
+    recalculateCanvasSize() {
       const sysInfo = uni.getSystemInfoSync()
       this.dpr = sysInfo.pixelRatio || 2
 
@@ -345,13 +345,14 @@ export default {
       const statusBarHeight = sysInfo.statusBarHeight || 0
       const safeBottom = sysInfo.safeArea ? (sysInfo.screenHeight - sysInfo.safeArea.bottom) : 0
 
+      // UI 高度估算
       const headerH = statusBarHeight + 44
       const skillBarH = 50
       const towerBarH = 70 + safeBottom
       const availableH = screenHeight - headerH - skillBarH - towerBarH
 
-      // 重新计算网格
-      const oldGridSize = this.config.gridSize
+      // 网格计算
+      this.config.cols = 8
       this.config.gridSize = Math.floor(screenWidth / this.config.cols)
       this.config.rows = Math.floor(availableH / this.config.gridSize)
       if (this.config.rows < 8) this.config.rows = 8
@@ -363,6 +364,15 @@ export default {
         width: this.canvasWidth + 'px',
         height: this.canvasHeight + 'px'
       }
+
+      console.log('Canvas size:', this.canvasWidth, 'x', this.canvasHeight, 'Grid:', this.config.gridSize, 'Rows:', this.config.rows)
+    },
+
+    resizeCanvas() {
+      const oldGridSize = this.config.gridSize
+
+      // 重新计算尺寸
+      this.recalculateCanvasSize()
 
       // 更新画布物理尺寸
       if (this.canvas && this.ctx) {
@@ -453,41 +463,8 @@ export default {
     },
 
     initCanvas() {
-      const sysInfo = uni.getSystemInfoSync()
-      this.dpr = sysInfo.pixelRatio || 2
-
-      // 计算可用空间
-      const screenWidth = sysInfo.windowWidth
-      const screenHeight = sysInfo.windowHeight
-      const statusBarHeight = sysInfo.statusBarHeight || 0
-      const safeBottom = sysInfo.safeArea ? (sysInfo.screenHeight - sysInfo.safeArea.bottom) : 0
-
-      // UI 固定高度
-      const headerH = statusBarHeight + 44
-      const skillBarH = 50
-      const towerBarH = 70 + safeBottom
-
-      // 画布尺寸 = 屏幕 - UI
-      const availableH = screenHeight - headerH - skillBarH - towerBarH
-
-      // 网格计算
-      this.config.cols = 8
-      this.config.gridSize = Math.floor(screenWidth / this.config.cols)
-      this.config.rows = Math.floor(availableH / this.config.gridSize)
-
-      // 确保至少有8行
-      if (this.config.rows < 8) this.config.rows = 8
-
-      this.canvasWidth = this.config.cols * this.config.gridSize
-      this.canvasHeight = this.config.rows * this.config.gridSize
-
-      // 设置 canvas 样式
-      this.canvasStyle = {
-        width: this.canvasWidth + 'px',
-        height: this.canvasHeight + 'px'
-      }
-
-      console.log('Canvas:', this.canvasWidth, 'x', this.canvasHeight, 'Grid:', this.config.gridSize, 'Rows:', this.config.rows)
+      // 初始计算画布尺寸
+      this.recalculateCanvasSize()
 
       this.$nextTick(() => {
         const query = uni.createSelectorQuery().in(this)
@@ -502,6 +479,9 @@ export default {
 
             this.canvas = res[0].node
             this.ctx = this.canvas.getContext('2d')
+
+            // 重新计算一次确保尺寸正确
+            this.recalculateCanvasSize()
 
             // 设置物理像素
             this.canvas.width = this.canvasWidth * this.dpr
@@ -1313,7 +1293,7 @@ export default {
 
       // 绘制防御塔
       this.towers.forEach(tower => {
-        const size = gridSize * 0.6
+        const size = gridSize - 6
 
         // 攻击范围
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)'
@@ -1357,7 +1337,7 @@ export default {
 
       // 绘制敌人
       this.enemies.forEach(enemy => {
-        const size = gridSize * 0.4
+        const size = gridSize * 0.55
 
         // 幽灵相位效果
         if (enemy.isPhased) {
