@@ -321,11 +321,82 @@ export default {
 
   mounted() {
     this.loadHighScore()
+    // 监听窗口大小变化
+    uni.onWindowResize(this.handleResize)
   },
 
   methods: {
     goBack() {
       uni.navigateBack()
+    },
+
+    handleResize() {
+      // 仅在游戏界面时重新计算画布
+      if (this.screen !== 'game' || !this.canvas) return
+      this.resizeCanvas()
+    },
+
+    resizeCanvas() {
+      const sysInfo = uni.getSystemInfoSync()
+      this.dpr = sysInfo.pixelRatio || 2
+
+      const screenWidth = sysInfo.windowWidth
+      const screenHeight = sysInfo.windowHeight
+      const statusBarHeight = sysInfo.statusBarHeight || 0
+      const safeBottom = sysInfo.safeArea ? (sysInfo.screenHeight - sysInfo.safeArea.bottom) : 0
+
+      const headerH = statusBarHeight + 44
+      const skillBarH = 50
+      const towerBarH = 70 + safeBottom
+      const availableH = screenHeight - headerH - skillBarH - towerBarH
+
+      // 重新计算网格
+      const oldGridSize = this.config.gridSize
+      this.config.gridSize = Math.floor(screenWidth / this.config.cols)
+      this.config.rows = Math.floor(availableH / this.config.gridSize)
+      if (this.config.rows < 8) this.config.rows = 8
+
+      this.canvasWidth = this.config.cols * this.config.gridSize
+      this.canvasHeight = this.config.rows * this.config.gridSize
+
+      this.canvasStyle = {
+        width: this.canvasWidth + 'px',
+        height: this.canvasHeight + 'px'
+      }
+
+      // 更新画布物理尺寸
+      if (this.canvas && this.ctx) {
+        this.canvas.width = this.canvasWidth * this.dpr
+        this.canvas.height = this.canvasHeight * this.dpr
+        this.ctx.setTransform(1, 0, 0, 1, 0, 0)
+        this.ctx.scale(this.dpr, this.dpr)
+      }
+
+      // 如果网格大小变化，需要重新计算塔和敌人的位置
+      if (oldGridSize !== this.config.gridSize) {
+        const scale = this.config.gridSize / oldGridSize
+
+        // 更新塔的位置和范围
+        this.towers.forEach(tower => {
+          tower.x = tower.gridX * this.config.gridSize + this.config.gridSize / 2
+          tower.y = tower.gridY * this.config.gridSize + this.config.gridSize / 2
+          tower.range = Math.floor(tower.range * scale)
+        })
+
+        // 重新生成路径
+        this.generatePath()
+
+        // 更新敌人位置到新路径
+        this.enemies.forEach(enemy => {
+          if (enemy.pathIndex < this.path.length) {
+            const pathPoint = this.path[enemy.pathIndex]
+            enemy.x = pathPoint.x
+            enemy.y = pathPoint.y
+          }
+        })
+      }
+
+      console.log('Resized:', this.canvasWidth, 'x', this.canvasHeight)
     },
 
     loadHighScore() {
@@ -1430,6 +1501,7 @@ export default {
     if (this.animationId) {
       cancelAnimationFrame(this.animationId)
     }
+    uni.offWindowResize(this.handleResize)
   }
 }
 </script>
