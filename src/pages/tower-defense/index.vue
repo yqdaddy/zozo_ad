@@ -336,77 +336,111 @@ export default {
       this.resizeCanvas()
     },
 
-    recalculateCanvasSize() {
+    recalculateCanvasSize(callback) {
       const sysInfo = uni.getSystemInfoSync()
       this.dpr = sysInfo.pixelRatio || 2
 
       const screenWidth = sysInfo.windowWidth
       const screenHeight = sysInfo.windowHeight
-      const statusBarHeight = sysInfo.statusBarHeight || 0
-      const safeBottom = sysInfo.safeArea ? (sysInfo.screenHeight - sysInfo.safeArea.bottom) : 0
 
-      // UI 高度估算
-      const headerH = statusBarHeight + 44
-      const skillBarH = 50
-      const towerBarH = 70 + safeBottom
-      const availableH = screenHeight - headerH - skillBarH - towerBarH
+      // 尝试获取实际 DOM 元素尺寸
+      const query = uni.createSelectorQuery().in(this)
+      query.select('.game-header').boundingClientRect()
+      query.select('.skill-bar').boundingClientRect()
+      query.select('.tower-bar').boundingClientRect()
+      query.select('.canvas-container').boundingClientRect()
+      query.exec((rects) => {
+        let availableH
 
-      // 网格计算
-      this.config.cols = 8
-      this.config.gridSize = Math.floor(screenWidth / this.config.cols)
-      this.config.rows = Math.floor(availableH / this.config.gridSize)
-      if (this.config.rows < 8) this.config.rows = 8
+        // 如果能获取到 canvas-container 的实际尺寸，直接使用
+        if (rects && rects[3] && rects[3].height > 0) {
+          availableH = rects[3].height
+          console.log('Using actual container height:', availableH)
+        } else if (rects && rects[0] && rects[1] && rects[2]) {
+          // 使用各个元素的实际高度计算
+          const headerH = rects[0].height || 0
+          const skillBarH = rects[1].height || 0
+          const towerBarH = rects[2].height || 0
+          availableH = screenHeight - headerH - skillBarH - towerBarH
+          console.log('Calculated heights - Header:', headerH, 'Skill:', skillBarH, 'Tower:', towerBarH, 'Available:', availableH)
+        } else {
+          // 降级方案：使用比例计算
+          const statusBarHeight = sysInfo.statusBarHeight || 0
+          const safeTop = sysInfo.safeArea ? sysInfo.safeArea.top : statusBarHeight
+          const safeBottom = sysInfo.safeArea ? (sysInfo.screenHeight - sysInfo.safeArea.bottom) : 0
 
-      this.canvasWidth = this.config.cols * this.config.gridSize
-      this.canvasHeight = this.config.rows * this.config.gridSize
+          // 使用 rpx 转换计算实际像素值
+          const rpxRatio = screenWidth / 750
+          const headerH = safeTop + Math.ceil(44 * rpxRatio) + Math.ceil(24 * rpxRatio) // padding
+          const skillBarH = Math.ceil(70 * rpxRatio) // 包含 padding
+          const towerBarH = Math.ceil(90 * rpxRatio) + safeBottom // 包含 padding
 
-      this.canvasStyle = {
-        width: this.canvasWidth + 'px',
-        height: this.canvasHeight + 'px'
-      }
+          availableH = screenHeight - headerH - skillBarH - towerBarH
+          console.log('Fallback calculation - Available:', availableH, 'rpxRatio:', rpxRatio)
+        }
 
-      console.log('Canvas size:', this.canvasWidth, 'x', this.canvasHeight, 'Grid:', this.config.gridSize, 'Rows:', this.config.rows)
+        // 网格计算
+        this.config.cols = 8
+        this.config.gridSize = Math.floor(screenWidth / this.config.cols)
+        this.config.rows = Math.floor(availableH / this.config.gridSize)
+
+        // 限制最小和最大行数
+        if (this.config.rows < 8) this.config.rows = 8
+        if (this.config.rows > 14) this.config.rows = 14
+
+        this.canvasWidth = this.config.cols * this.config.gridSize
+        this.canvasHeight = this.config.rows * this.config.gridSize
+
+        this.canvasStyle = {
+          width: this.canvasWidth + 'px',
+          height: this.canvasHeight + 'px'
+        }
+
+        console.log('Canvas size:', this.canvasWidth, 'x', this.canvasHeight, 'Grid:', this.config.gridSize, 'Rows:', this.config.rows, 'Screen:', screenWidth, 'x', screenHeight)
+
+        if (callback) callback()
+      })
     },
 
     resizeCanvas() {
       const oldGridSize = this.config.gridSize
 
       // 重新计算尺寸
-      this.recalculateCanvasSize()
+      this.recalculateCanvasSize(() => {
+        // 更新画布物理尺寸
+        if (this.canvas && this.ctx) {
+          this.canvas.width = this.canvasWidth * this.dpr
+          this.canvas.height = this.canvasHeight * this.dpr
+          this.ctx.setTransform(1, 0, 0, 1, 0, 0)
+          this.ctx.scale(this.dpr, this.dpr)
+        }
 
-      // 更新画布物理尺寸
-      if (this.canvas && this.ctx) {
-        this.canvas.width = this.canvasWidth * this.dpr
-        this.canvas.height = this.canvasHeight * this.dpr
-        this.ctx.setTransform(1, 0, 0, 1, 0, 0)
-        this.ctx.scale(this.dpr, this.dpr)
-      }
+        // 如果网格大小变化，需要重新计算塔和敌人的位置
+        if (oldGridSize !== this.config.gridSize) {
+          const scale = this.config.gridSize / oldGridSize
 
-      // 如果网格大小变化，需要重新计算塔和敌人的位置
-      if (oldGridSize !== this.config.gridSize) {
-        const scale = this.config.gridSize / oldGridSize
+          // 更新塔的位置和范围
+          this.towers.forEach(tower => {
+            tower.x = tower.gridX * this.config.gridSize + this.config.gridSize / 2
+            tower.y = tower.gridY * this.config.gridSize + this.config.gridSize / 2
+            tower.range = Math.floor(tower.range * scale)
+          })
 
-        // 更新塔的位置和范围
-        this.towers.forEach(tower => {
-          tower.x = tower.gridX * this.config.gridSize + this.config.gridSize / 2
-          tower.y = tower.gridY * this.config.gridSize + this.config.gridSize / 2
-          tower.range = Math.floor(tower.range * scale)
-        })
+          // 重新生成路径
+          this.generatePath()
 
-        // 重新生成路径
-        this.generatePath()
+          // 更新敌人位置到新路径
+          this.enemies.forEach(enemy => {
+            if (enemy.pathIndex < this.path.length) {
+              const pathPoint = this.path[enemy.pathIndex]
+              enemy.x = pathPoint.x
+              enemy.y = pathPoint.y
+            }
+          })
+        }
 
-        // 更新敌人位置到新路径
-        this.enemies.forEach(enemy => {
-          if (enemy.pathIndex < this.path.length) {
-            const pathPoint = this.path[enemy.pathIndex]
-            enemy.x = pathPoint.x
-            enemy.y = pathPoint.y
-          }
-        })
-      }
-
-      console.log('Resized:', this.canvasWidth, 'x', this.canvasHeight)
+        console.log('Resized:', this.canvasWidth, 'x', this.canvasHeight)
+      })
     },
 
     loadHighScore() {
@@ -463,10 +497,8 @@ export default {
     },
 
     initCanvas() {
-      // 初始计算画布尺寸
-      this.recalculateCanvasSize()
-
       this.$nextTick(() => {
+        // 先获取 canvas 节点
         const query = uni.createSelectorQuery().in(this)
         query.select('#gameCanvas')
           .fields({ node: true, size: true })
@@ -480,17 +512,30 @@ export default {
             this.canvas = res[0].node
             this.ctx = this.canvas.getContext('2d')
 
-            // 重新计算一次确保尺寸正确
-            this.recalculateCanvasSize()
+            // 计算画布尺寸（使用实际 DOM 尺寸）
+            this.recalculateCanvasSize(() => {
+              // 设置物理像素
+              this.canvas.width = this.canvasWidth * this.dpr
+              this.canvas.height = this.canvasHeight * this.dpr
+              this.ctx.scale(this.dpr, this.dpr)
 
-            // 设置物理像素
-            this.canvas.width = this.canvasWidth * this.dpr
-            this.canvas.height = this.canvasHeight * this.dpr
-            this.ctx.scale(this.dpr, this.dpr)
+              this.generatePath()
+              this.startWave()
+              this.gameLoop()
 
-            this.generatePath()
-            this.startWave()
-            this.gameLoop()
+              // 延迟再计算一次，确保 UI 完全渲染
+              setTimeout(() => {
+                this.recalculateCanvasSize(() => {
+                  if (this.canvas && this.ctx) {
+                    this.canvas.width = this.canvasWidth * this.dpr
+                    this.canvas.height = this.canvasHeight * this.dpr
+                    this.ctx.setTransform(1, 0, 0, 1, 0, 0)
+                    this.ctx.scale(this.dpr, this.dpr)
+                    this.generatePath()
+                  }
+                })
+              }, 300)
+            })
           })
       })
     },
@@ -1578,7 +1623,10 @@ export default {
 /* 游戏界面 */
 .game-screen {
   height: 100vh;
+  max-height: 100vh;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .game-header {
@@ -1631,6 +1679,7 @@ export default {
   justify-content: center;
   overflow: hidden;
   background: #1a472a;
+  min-height: 0; /* 重要：允许 flex 子元素收缩 */
 }
 
 .game-canvas {
