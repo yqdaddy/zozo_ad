@@ -338,7 +338,7 @@ export default {
       this.resizeCanvas()
     },
 
-    // 初始化时的适配（包含塔和敌人位置更新）
+    // 窗口调整时的适配（包含塔和敌人位置更新）
     resizeCanvas() {
       const oldGridSize = this.config.gridSize
       const oldRows = this.config.rows
@@ -359,11 +359,18 @@ export default {
         this.config.gridSize = Math.floor(this.containerWidth / this.config.cols)
         this.config.rows = Math.floor(this.containerHeight / this.config.gridSize)
 
-        if (this.config.rows < 6) this.config.rows = 6
+        // 确保至少10行，最多16行
+        if (this.config.rows < 10) this.config.rows = 10
         if (this.config.rows > 16) this.config.rows = 16
 
         this.canvasWidth = this.config.cols * this.config.gridSize
         this.canvasHeight = this.config.rows * this.config.gridSize
+
+        // 如果画布高度小于容器高度，调整为填满容器
+        if (this.canvasHeight < this.containerHeight) {
+          this.canvasHeight = this.containerHeight
+          this.config.rows = Math.ceil(this.canvasHeight / this.config.gridSize)
+        }
 
         if (this.canvas && this.ctx) {
           this.canvas.style.width = this.canvasWidth + 'px'
@@ -509,18 +516,26 @@ export default {
         this.containerWidth = Math.floor(container.width)
         this.containerHeight = Math.floor(container.height)
 
-        // 计算网格参数
+        // 计算网格参数 - 固定8列
         this.config.cols = 8
         this.config.gridSize = Math.floor(this.containerWidth / this.config.cols)
+
+        // 计算行数 - 确保填满容器高度
         this.config.rows = Math.floor(this.containerHeight / this.config.gridSize)
 
-        // 限制行数
-        if (this.config.rows < 6) this.config.rows = 6
+        // 确保至少10行，最多16行
+        if (this.config.rows < 10) this.config.rows = 10
         if (this.config.rows > 16) this.config.rows = 16
 
-        // 计算画布尺寸
+        // 计算画布尺寸 - 宽度填满，高度基于行数
         this.canvasWidth = this.config.cols * this.config.gridSize
         this.canvasHeight = this.config.rows * this.config.gridSize
+
+        // 如果画布高度小于容器高度，调整为填满容器
+        if (this.canvasHeight < this.containerHeight) {
+          this.canvasHeight = this.containerHeight
+          this.config.rows = Math.ceil(this.canvasHeight / this.config.gridSize)
+        }
 
         // 设置 canvas CSS 尺寸
         this.canvas.style.width = this.canvasWidth + 'px'
@@ -1682,21 +1697,16 @@ export default {
 .canvas-container {
   flex: 1;
   display: flex;
-  align-items: center;
+  align-items: flex-start; /* 从顶部开始，不要居中 */
   justify-content: center;
   overflow: hidden;
   background: #1a472a;
-  min-height: 0; /* 重要：允许 flex 子元素收缩 */
-  position: relative;
-  /* 使用 100% 宽度确保容器填满 */
+  min-height: 0;
   width: 100%;
 }
 
 .game-canvas {
   display: block;
-  /* 默认尺寸，会被 JS 覆盖 */
-  max-width: 100%;
-  max-height: 100%;
 }
 
 .skill-bar {
