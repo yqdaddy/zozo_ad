@@ -234,12 +234,12 @@ export default {
         { type: 'ice', emoji: '❄️', cost: 70, name: '冰冻塔' }
       ],
 
-      // 防御塔配置
+      // 防御塔配置（range 会在 buildTower 时根据 gridSize 调整）
       towerTypes: {
-        archer: { damage: 15, range: 80, fireRate: 600, projectileSpeed: 10, color: '#8B4513', projectileColor: '#FFD700' },
-        magic: { damage: 20, range: 70, fireRate: 1000, projectileSpeed: 8, color: '#9C27B0', projectileColor: '#E040FB', splash: 30 },
-        cannon: { damage: 40, range: 75, fireRate: 1500, projectileSpeed: 6, color: '#555', projectileColor: '#FF5722' },
-        ice: { damage: 8, range: 70, fireRate: 800, projectileSpeed: 9, color: '#00BCD4', projectileColor: '#80DEEA', slowEffect: 0.5, slowDuration: 2000 }
+        archer: { damage: 15, rangeMultiplier: 2.5, fireRate: 600, projectileSpeed: 10, color: '#8B4513', projectileColor: '#FFD700' },
+        magic: { damage: 20, rangeMultiplier: 2.2, fireRate: 1000, projectileSpeed: 8, color: '#9C27B0', projectileColor: '#E040FB', splashMultiplier: 0.8 },
+        cannon: { damage: 40, rangeMultiplier: 2.3, fireRate: 1500, projectileSpeed: 6, color: '#555', projectileColor: '#FF5722' },
+        ice: { damage: 8, rangeMultiplier: 2.2, fireRate: 800, projectileSpeed: 9, color: '#00BCD4', projectileColor: '#80DEEA', slowEffect: 0.5, slowDuration: 2000 }
       },
 
       // 敌人配置
@@ -318,44 +318,51 @@ export default {
       const sysInfo = uni.getSystemInfoSync()
       this.dpr = sysInfo.pixelRatio || 2
 
-      // 先设置一个临时尺寸，等待 DOM 渲染后再获取实际尺寸
-      this.canvasWidth = sysInfo.windowWidth
-      this.canvasHeight = 300
+      // 屏幕尺寸
+      const screenWidth = sysInfo.windowWidth
+      const screenHeight = sysInfo.windowHeight
+
+      // 安全区域
+      const statusBarHeight = sysInfo.statusBarHeight || 0
+      const safeAreaBottom = sysInfo.safeArea ? (sysInfo.screenHeight - sysInfo.safeArea.bottom) : 0
+
+      // UI 高度估算（单位：px）
+      const headerHeight = statusBarHeight + 44  // 状态栏 + header内容
+      const tipBarHeight = 40
+      const towerBarHeight = 80 + safeAreaBottom
+
+      // 画布可用尺寸
+      this.canvasWidth = screenWidth
+      const availableHeight = screenHeight - headerHeight - tipBarHeight - towerBarHeight
+
+      // 计算网格
+      this.config.cols = 8
+      this.config.gridSize = Math.floor(this.canvasWidth / this.config.cols)
+      this.config.rows = Math.floor(availableHeight / this.config.gridSize)
+
+      // 画布高度为网格整数倍
+      this.canvasHeight = this.config.rows * this.config.gridSize
+
+      console.log('Screen:', screenWidth, 'x', screenHeight)
+      console.log('Available height:', availableHeight)
+      console.log('Canvas:', this.canvasWidth, 'x', this.canvasHeight)
+      console.log('Grid:', this.config.cols, 'x', this.config.rows, 'size:', this.config.gridSize)
 
       this.$nextTick(() => {
-        // 查询 canvas-wrapper 的实际尺寸
         const query = uni.createSelectorQuery().in(this)
-        query.select('#canvasWrapper')
-          .boundingClientRect()
-          .select('#gameCanvas')
+        query.select('#gameCanvas')
           .fields({ node: true, size: true })
           .exec((res) => {
-            if (!res || !res[0] || !res[1] || !res[1].node) {
+            if (!res || !res[0] || !res[0].node) {
               console.error('Canvas not found, retrying...')
               setTimeout(() => this.initCanvas(), 200)
               return
             }
 
-            const wrapperRect = res[0]
-            this.canvas = res[1].node
+            this.canvas = res[0].node
             this.ctx = this.canvas.getContext('2d')
 
-            // 使用 wrapper 的实际尺寸
-            this.canvasWidth = Math.floor(wrapperRect.width)
-            this.canvasHeight = Math.floor(wrapperRect.height)
-
-            // 计算网格
-            this.config.cols = 8
-            this.config.gridSize = Math.floor(this.canvasWidth / this.config.cols)
-            this.config.rows = Math.floor(this.canvasHeight / this.config.gridSize)
-
-            // 调整画布高度为网格整数倍
-            this.canvasHeight = this.config.rows * this.config.gridSize
-
-            console.log('Wrapper:', wrapperRect.width, 'x', wrapperRect.height)
-            console.log('Canvas:', this.canvasWidth, 'x', this.canvasHeight, 'Grid:', this.config.cols, 'x', this.config.rows)
-
-            // 设置 canvas 实际像素尺寸（高清屏）
+            // 设置 canvas 物理像素尺寸
             this.canvas.width = this.canvasWidth * this.dpr
             this.canvas.height = this.canvasHeight * this.dpr
             this.ctx.scale(this.dpr, this.dpr)
@@ -438,27 +445,32 @@ export default {
       const touch = e.touches[0]
       if (!touch) return
 
-      // 获取触摸坐标（相对于画布）
+      // 获取触摸坐标
       let x, y
 
-      // #ifdef H5
-      const rect = e.currentTarget.getBoundingClientRect ?
-        e.currentTarget.getBoundingClientRect() :
-        { left: 0, top: 0 }
-      x = touch.clientX - rect.left
-      y = touch.clientY - rect.top
-      // #endif
+      // 小程序环境下 touch 对象直接提供相对于 canvas 的坐标
+      if (typeof touch.x === 'number' && typeof touch.y === 'number') {
+        x = touch.x
+        y = touch.y
+      } else {
+        // H5 环境需要手动计算
+        const rect = e.currentTarget.getBoundingClientRect
+          ? e.currentTarget.getBoundingClientRect()
+          : { left: 0, top: 0 }
+        x = touch.clientX - rect.left
+        y = touch.clientY - rect.top
+      }
 
-      // #ifndef H5
-      x = touch.x
-      y = touch.y
-      // #endif
+      console.log('Touch at:', x, y, 'gridSize:', this.config.gridSize)
 
       const gridX = Math.floor(x / this.config.gridSize)
       const gridY = Math.floor(y / this.config.gridSize)
 
+      console.log('Grid:', gridX, gridY)
+
       // 边界检查
-      if (gridY < 0 || gridY >= this.pathGrid.length || gridX < 0 || gridX >= this.config.cols) {
+      if (gridY < 0 || gridY >= this.config.rows || gridX < 0 || gridX >= this.config.cols) {
+        console.log('Out of bounds')
         return
       }
 
@@ -509,22 +521,37 @@ export default {
     buildTower(gridX, gridY) {
       const towerInfo = this.towerList.find(t => t.type === this.selectedTower)
       const config = this.towerTypes[this.selectedTower]
+      const gridSize = this.config.gridSize
+
+      // 计算实际攻击范围（基于网格大小）
+      const range = Math.floor(gridSize * (config.rangeMultiplier || 2))
+      const splash = config.splashMultiplier ? Math.floor(gridSize * config.splashMultiplier) : 0
 
       const tower = {
         id: Date.now(),
         type: this.selectedTower,
         gridX,
         gridY,
-        x: gridX * this.config.gridSize + this.config.gridSize / 2,
-        y: gridY * this.config.gridSize + this.config.gridSize / 2,
+        x: gridX * gridSize + gridSize / 2,
+        y: gridY * gridSize + gridSize / 2,
         level: 1,
         cost: towerInfo.cost,
         emoji: towerInfo.emoji,
         lastFire: 0,
         target: null,
         angle: 0,
-        ...config
+        damage: config.damage,
+        range: range,
+        fireRate: config.fireRate,
+        projectileSpeed: config.projectileSpeed,
+        color: config.color,
+        projectileColor: config.projectileColor,
+        splash: splash,
+        slowEffect: config.slowEffect || 0,
+        slowDuration: config.slowDuration || 0
       }
+
+      console.log('Built tower:', tower.type, 'at', gridX, gridY, 'range:', range)
 
       this.towers.push(tower)
       this.state.gold -= towerInfo.cost
@@ -568,9 +595,13 @@ export default {
     upgradeTower(tower, cost) {
       tower.level++
       tower.damage = Math.floor(tower.damage * 1.3)
-      tower.range = Math.floor(tower.range * 1.1)
+      tower.range = Math.floor(tower.range * 1.15)
       tower.fireRate = Math.floor(tower.fireRate * 0.9)
+      if (tower.splash) {
+        tower.splash = Math.floor(tower.splash * 1.1)
+      }
       this.state.gold -= cost
+      console.log('Upgraded tower to level', tower.level, 'range:', tower.range)
     },
 
     showMathQuestion(difficulty, callback) {
@@ -1289,14 +1320,11 @@ export default {
   justify-content: center;
   overflow: hidden;
   min-height: 0;
-  max-height: 100%;
 }
 
 .game-canvas {
   background: #2d5016;
   display: block;
-  max-width: 100%;
-  max-height: 100%;
 }
 
 .tip-bar {
