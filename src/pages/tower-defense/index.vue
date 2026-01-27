@@ -338,10 +338,11 @@ export default {
       this.resizeCanvas()
     },
 
-    // 窗口调整时的适配（包含塔和敌人位置更新）
+    // 窗口调整时重新计算画布
     resizeCanvas() {
+      if (!this.canvas || !this.ctx) return
+
       const oldGridSize = this.config.gridSize
-      const oldRows = this.config.rows
 
       const query = uni.createSelectorQuery().in(this)
       query.select('#canvasContainer').boundingClientRect()
@@ -349,73 +350,34 @@ export default {
         if (!res || !res[0] || res[0].width <= 0) return
 
         const container = res[0]
-        const sysInfo = uni.getSystemInfoSync()
-        this.dpr = Math.min(sysInfo.pixelRatio || 2, 3)
-
-        this.containerWidth = Math.floor(container.width)
-        this.containerHeight = Math.floor(container.height)
+        const containerW = Math.floor(container.width)
+        const containerH = Math.floor(container.height)
 
         this.config.cols = 8
-        this.config.gridSize = Math.floor(this.containerWidth / this.config.cols)
-        this.config.rows = Math.floor(this.containerHeight / this.config.gridSize)
-
-        // 确保至少10行，最多16行
-        if (this.config.rows < 10) this.config.rows = 10
-        if (this.config.rows > 16) this.config.rows = 16
+        this.config.gridSize = Math.floor(containerW / this.config.cols)
+        this.config.rows = Math.floor(containerH / this.config.gridSize)
 
         this.canvasWidth = this.config.cols * this.config.gridSize
         this.canvasHeight = this.config.rows * this.config.gridSize
 
-        // 如果画布高度小于容器高度，调整为填满容器
-        if (this.canvasHeight < this.containerHeight) {
-          this.canvasHeight = this.containerHeight
-          this.config.rows = Math.ceil(this.canvasHeight / this.config.gridSize)
-        }
+        // 更新画布尺寸
+        this.canvas.style.width = this.canvasWidth + 'px'
+        this.canvas.style.height = this.canvasHeight + 'px'
+        this.canvas.width = this.canvasWidth * this.dpr
+        this.canvas.height = this.canvasHeight * this.dpr
+        this.ctx.setTransform(1, 0, 0, 1, 0, 0)
+        this.ctx.scale(this.dpr, this.dpr)
 
-        if (this.canvas && this.ctx) {
-          this.canvas.style.width = this.canvasWidth + 'px'
-          this.canvas.style.height = this.canvasHeight + 'px'
-          this.canvas.width = Math.floor(this.canvasWidth * this.dpr)
-          this.canvas.height = Math.floor(this.canvasHeight * this.dpr)
-          this.ctx.setTransform(1, 0, 0, 1, 0, 0)
-          this.ctx.scale(this.dpr, this.dpr)
-        }
-
-        // 如果网格大小或行数变化，更新游戏对象位置
-        const gridChanged = oldGridSize > 0 && oldGridSize !== this.config.gridSize
-        const rowsChanged = oldRows > 0 && oldRows !== this.config.rows
-
-        if (gridChanged || rowsChanged) {
-          // 重新生成路径
+        // 网格大小变化时更新游戏对象
+        if (oldGridSize !== this.config.gridSize) {
           this.generatePath()
-
-          // 更新塔的位置
           this.towers.forEach(tower => {
-            // 检查塔是否还在有效范围内
-            if (tower.gridY >= this.config.rows) {
-              // 塔超出范围，移除
-              const idx = this.towers.indexOf(tower)
-              if (idx > -1) this.towers.splice(idx, 1)
-            } else {
-              tower.x = tower.gridX * this.config.gridSize + this.config.gridSize / 2
-              tower.y = tower.gridY * this.config.gridSize + this.config.gridSize / 2
-              // 重新计算攻击范围
-              const config = this.towerTypes[tower.type]
-              tower.range = Math.floor(this.config.gridSize * (config.rangeMultiplier || 2) * Math.pow(1.1, tower.level - 1))
-            }
-          })
-
-          // 更新敌人位置到最近的路径点
-          this.enemies.forEach(enemy => {
-            if (enemy.pathIndex < this.path.length) {
-              const pathPoint = this.path[Math.min(enemy.pathIndex, this.path.length - 1)]
-              enemy.x = pathPoint.x
-              enemy.y = pathPoint.y
-            }
+            tower.x = tower.gridX * this.config.gridSize + this.config.gridSize / 2
+            tower.y = tower.gridY * this.config.gridSize + this.config.gridSize / 2
           })
         }
 
-        console.log('[Resize] Canvas:', this.canvasWidth, 'x', this.canvasHeight, 'Grid:', this.config.gridSize, 'Rows:', this.config.rows)
+        console.log('[Resize]', this.canvasWidth, 'x', this.canvasHeight)
       })
     },
 
@@ -475,87 +437,65 @@ export default {
 
     initCanvas() {
       this.isCanvasReady = false
-
-      // 等待 DOM 完全渲染
+      // 等待 DOM 完全渲染后初始化
       this.$nextTick(() => {
-        // 延迟确保布局完成
-        setTimeout(() => {
-          this.setupCanvas()
-        }, 100)
+        setTimeout(() => this.setupCanvas(), 200)
       })
     },
 
     setupCanvas() {
+      // 获取系统信息
+      const sysInfo = uni.getSystemInfoSync()
+      this.dpr = Math.min(sysInfo.pixelRatio || 2, 2) // 限制最大 DPR 为 2
+
       const query = uni.createSelectorQuery().in(this)
       query.select('#gameCanvas').fields({ node: true, size: true })
       query.select('#canvasContainer').boundingClientRect()
       query.exec((res) => {
-        // 检查 canvas 节点
         if (!res || !res[0] || !res[0].node) {
           console.error('Canvas not found, retrying...')
-          setTimeout(() => this.setupCanvas(), 150)
+          setTimeout(() => this.setupCanvas(), 200)
           return
         }
 
-        // 检查容器尺寸
         const container = res[1]
         if (!container || container.width <= 0 || container.height <= 0) {
           console.error('Container not ready, retrying...')
-          setTimeout(() => this.setupCanvas(), 150)
+          setTimeout(() => this.setupCanvas(), 200)
           return
         }
 
         this.canvas = res[0].node
         this.ctx = this.canvas.getContext('2d')
 
-        // 获取系统信息
-        const sysInfo = uni.getSystemInfoSync()
-        this.dpr = Math.min(sysInfo.pixelRatio || 2, 3)
+        // 使用容器的实际尺寸
+        const containerW = Math.floor(container.width)
+        const containerH = Math.floor(container.height)
 
-        // 保存容器尺寸
-        this.containerWidth = Math.floor(container.width)
-        this.containerHeight = Math.floor(container.height)
-
-        // 计算网格参数 - 固定8列
+        // 计算网格：固定 8 列
         this.config.cols = 8
-        this.config.gridSize = Math.floor(this.containerWidth / this.config.cols)
+        this.config.gridSize = Math.floor(containerW / this.config.cols)
+        this.config.rows = Math.floor(containerH / this.config.gridSize)
 
-        // 计算行数 - 确保填满容器高度
-        this.config.rows = Math.floor(this.containerHeight / this.config.gridSize)
-
-        // 确保至少10行，最多16行
-        if (this.config.rows < 10) this.config.rows = 10
-        if (this.config.rows > 16) this.config.rows = 16
-
-        // 计算画布尺寸 - 宽度填满，高度基于行数
+        // 画布尺寸 = 网格数 × 网格大小
         this.canvasWidth = this.config.cols * this.config.gridSize
         this.canvasHeight = this.config.rows * this.config.gridSize
 
-        // 如果画布高度小于容器高度，调整为填满容器
-        if (this.canvasHeight < this.containerHeight) {
-          this.canvasHeight = this.containerHeight
-          this.config.rows = Math.ceil(this.canvasHeight / this.config.gridSize)
-        }
-
-        // 设置 canvas CSS 尺寸
+        // 设置 canvas 的 CSS 尺寸（逻辑像素）
         this.canvas.style.width = this.canvasWidth + 'px'
         this.canvas.style.height = this.canvasHeight + 'px'
 
-        // 设置 canvas 物理像素尺寸
-        this.canvas.width = Math.floor(this.canvasWidth * this.dpr)
-        this.canvas.height = Math.floor(this.canvasHeight * this.dpr)
+        // 设置 canvas 的物理像素尺寸
+        this.canvas.width = this.canvasWidth * this.dpr
+        this.canvas.height = this.canvasHeight * this.dpr
 
-        // 设置缩放
+        // 缩放绘图上下文
         this.ctx.scale(this.dpr, this.dpr)
 
-        console.log('[Init] Container:', this.containerWidth, 'x', this.containerHeight,
-          'Canvas:', this.canvasWidth, 'x', this.canvasHeight,
-          'Grid:', this.config.gridSize, 'Rows:', this.config.rows)
+        console.log('[Canvas] Size:', this.canvasWidth, 'x', this.canvasHeight,
+          'Grid:', this.config.gridSize, 'Rows:', this.config.rows, 'Cols:', this.config.cols)
 
-        // 标记画布已就绪
         this.isCanvasReady = true
-
-        // 生成路径并开始游戏
         this.generatePath()
         this.startWave()
         this.gameLoop()
@@ -1696,17 +1636,14 @@ export default {
 
 .canvas-container {
   flex: 1;
-  display: flex;
-  align-items: flex-start; /* 从顶部开始，不要居中 */
-  justify-content: center;
   overflow: hidden;
   background: #1a472a;
   min-height: 0;
-  width: 100%;
 }
 
 .game-canvas {
   display: block;
+  background: #1a472a;
 }
 
 .skill-bar {
