@@ -242,9 +242,9 @@ export default {
 
       // 游戏配置
       config: {
-        gridSize: 40,
-        cols: 8,
-        rows: 12
+        gridSize: 36,
+        cols: 10,
+        rows: 14
       },
 
       // Canvas 相关
@@ -286,14 +286,14 @@ export default {
         lightning: { damage: 35, rangeMultiplier: 2.8, fireRate: 1000, projectileSpeed: 20, color: '#FFC107', projectileColor: '#FFEB3B', chainCount: 3 }
       },
 
-      // 敌人配置
+      // 敌人配置 - 降低速度
       enemyTypes: {
-        basic: { emoji: '👾', health: 50, speed: 1.0, gold: 10, color: '#4CAF50' },
-        fast: { emoji: '💨', health: 30, speed: 2.0, gold: 15, color: '#03A9F4' },
-        tank: { emoji: '🛡️', health: 150, speed: 0.5, gold: 25, color: '#795548' },
-        healer: { emoji: '💚', health: 60, speed: 0.8, gold: 20, color: '#8BC34A', healAura: true },
-        boss: { emoji: '👹', health: 400, speed: 0.4, gold: 100, color: '#F44336' },
-        ghost: { emoji: '👻', health: 40, speed: 1.2, gold: 20, color: '#9E9E9E', phaseShift: true }
+        basic: { emoji: '👾', health: 50, speed: 0.5, gold: 10, color: '#4CAF50' },
+        fast: { emoji: '💨', health: 30, speed: 1.0, gold: 15, color: '#03A9F4' },
+        tank: { emoji: '🛡️', health: 150, speed: 0.25, gold: 25, color: '#795548' },
+        healer: { emoji: '💚', health: 60, speed: 0.4, gold: 20, color: '#8BC34A', healAura: true },
+        boss: { emoji: '👹', health: 400, speed: 0.2, gold: 100, color: '#F44336' },
+        ghost: { emoji: '👻', health: 40, speed: 0.6, gold: 20, color: '#9E9E9E', phaseShift: true }
       },
 
       // 数学题相关
@@ -353,7 +353,7 @@ export default {
         const containerW = Math.floor(container.width)
         const containerH = Math.floor(container.height)
 
-        this.config.cols = 8
+        this.config.cols = 10
         this.config.gridSize = Math.floor(containerW / this.config.cols)
         this.config.rows = Math.floor(containerH / this.config.gridSize)
 
@@ -473,7 +473,7 @@ export default {
         const containerH = Math.floor(container.height)
 
         // 计算网格：固定 8 列
-        this.config.cols = 8
+        this.config.cols = 10
         this.config.gridSize = Math.floor(containerW / this.config.cols)
         this.config.rows = Math.floor(containerH / this.config.gridSize)
 
@@ -611,17 +611,39 @@ export default {
       const touch = e.touches[0]
       if (!touch) return
 
+      // 获取触摸坐标 - 优先使用 canvas 相对坐标
       let x, y
+
+      // #ifdef H5
+      // H5 环境使用 offsetX/offsetY 或计算相对位置
+      if (typeof touch.offsetX === 'number') {
+        x = touch.offsetX
+        y = touch.offsetY
+      } else if (e.currentTarget && e.currentTarget.getBoundingClientRect) {
+        const rect = e.currentTarget.getBoundingClientRect()
+        x = touch.clientX - rect.left
+        y = touch.clientY - rect.top
+      } else {
+        x = touch.clientX
+        y = touch.clientY
+      }
+      // #endif
+
+      // #ifndef H5
+      // 小程序环境使用 touch.x/y
       if (typeof touch.x === 'number' && typeof touch.y === 'number') {
         x = touch.x
         y = touch.y
-      } else {
-        const rect = e.currentTarget.getBoundingClientRect
-          ? e.currentTarget.getBoundingClientRect()
-          : { left: 0, top: 0 }
-        x = touch.clientX - rect.left
-        y = touch.clientY - rect.top
       }
+      // #endif
+
+      // 确保坐标有效
+      if (typeof x !== 'number' || typeof y !== 'number') {
+        console.warn('Invalid touch coordinates')
+        return
+      }
+
+      console.log('[Touch]', x, y, 'Grid:', Math.floor(x / this.config.gridSize), Math.floor(y / this.config.gridSize))
 
       // 使用技能
       if (this.activeSkill === 'bomb') {
