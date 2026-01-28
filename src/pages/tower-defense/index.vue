@@ -5,7 +5,8 @@
       <view class="menu-box">
         <text class="menu-title">🏰 数学塔防</text>
         <text class="menu-sub">五年级上册</text>
-        <button class="btn-start" @click="startGame('normal')">开始游戏</button>
+        <button class="btn-start" @click="startGame('normal')">普通模式</button>
+        <button class="btn-endless" @click="startGame('endless')">无尽模式</button>
         <button class="btn-back" @click="goBack">返回</button>
       </view>
     </view>
@@ -16,7 +17,7 @@
       <view class="top-bar">
         <text class="stat">❤️{{ lives }}</text>
         <text class="stat">💰{{ gold }}</text>
-        <text class="stat">🌊{{ wave }}</text>
+        <text class="stat">🌊{{ wave }}{{ gameMode === 'endless' ? '' : '/10' }}</text>
         <text class="btn-pause" @click="togglePause">{{ paused ? '▶️' : '⏸️' }}</text>
       </view>
 
@@ -29,6 +30,11 @@
           :style="{ width: canvasW + 'px', height: canvasH + 'px' }"
           @touchstart="onTouch"
         ></canvas>
+      </view>
+
+      <!-- 冰冻大招提示 -->
+      <view v-if="freezeUltActive" class="ult-hint">
+        <text>❄️ 全体冰冻中！</text>
       </view>
 
       <!-- 底部塔选择 -->
@@ -78,6 +84,7 @@ export default {
   data() {
     return {
       screen: 'menu',
+      gameMode: 'normal', // 'normal' or 'endless'
 
       // 画布
       canvas: null,
@@ -85,6 +92,7 @@ export default {
       canvasW: 300,
       canvasH: 400,
       dpr: 1,
+      canvasReady: false,
 
       // 网格配置
       cols: 10,
@@ -99,6 +107,7 @@ export default {
       gameOver: false,
       win: false,
       animId: null,
+      waveSpawning: false,
 
       // 游戏对象
       path: [],
@@ -106,6 +115,7 @@ export default {
       towers: [],
       enemies: [],
       bullets: [],
+      fortresses: [], // 堡垒
 
       // 选择
       selectedTower: null,
@@ -115,20 +125,25 @@ export default {
       question: { text: '', answer: 0, options: [] },
       pendingTower: null,
 
+      // 冰冻大招
+      freezeUltActive: false,
+      freezeUltEndTime: 0,
+
       // 塔定义
       towerDefs: [
         { type: 'archer', icon: '🏹', cost: 40, damage: 15, range: 3, rate: 800 },
         { type: 'magic', icon: '✨', cost: 60, damage: 25, range: 2.5, rate: 1200 },
         { type: 'cannon', icon: '💣', cost: 80, damage: 50, range: 2, rate: 1500 },
-        { type: 'ice', icon: '❄️', cost: 50, damage: 10, range: 2.5, rate: 1000, slow: 0.5 }
+        { type: 'ice', icon: '❄️', cost: 50, damage: 10, range: 2.5, rate: 1000, slow: 0.5 },
+        { type: 'fortress', icon: '🏯', cost: 30, onPath: true, hp: 1, blockTime: 3000 }
       ],
 
-      // 敌人定义
+      // 敌人定义 - 速度降低
       enemyDefs: {
-        normal: { hp: 40, speed: 0.8, reward: 10, color: '#4CAF50' },
-        fast: { hp: 25, speed: 1.5, reward: 15, color: '#2196F3' },
-        tank: { hp: 100, speed: 0.4, reward: 25, color: '#795548' },
-        boss: { hp: 300, speed: 0.3, reward: 80, color: '#f44336' }
+        normal: { hp: 40, speed: 0.4, reward: 10, color: '#4CAF50' },
+        fast: { hp: 25, speed: 0.7, reward: 15, color: '#2196F3' },
+        tank: { hp: 100, speed: 0.2, reward: 25, color: '#795548' },
+        boss: { hp: 300, speed: 0.15, reward: 80, color: '#f44336' }
       }
     }
   },
@@ -138,7 +153,8 @@ export default {
       uni.navigateBack()
     },
 
-    startGame() {
+    startGame(mode) {
+      this.gameMode = mode
       this.screen = 'game'
       this.lives = 20
       this.gold = 100
@@ -149,7 +165,12 @@ export default {
       this.towers = []
       this.enemies = []
       this.bullets = []
+      this.fortresses = []
       this.selectedTower = null
+      this.waveSpawning = false
+      this.freezeUltActive = false
+      this.freezeUltEndTime = 0
+      this.canvasReady = false
 
       this.$nextTick(() => {
         setTimeout(() => this.initCanvas(), 100)
@@ -157,6 +178,14 @@ export default {
     },
 
     initCanvas() {
+      // 如果画布已经初始化过，直接开始游戏
+      if (this.canvasReady && this.canvas && this.ctx) {
+        this.generatePath()
+        this.spawnWave()
+        this.gameLoop()
+        return
+      }
+
       const query = uni.createSelectorQuery().in(this)
       query.select('#canvasWrap').boundingClientRect()
       query.select('#gameCanvas').fields({ node: true, size: true })
@@ -190,6 +219,8 @@ export default {
         this.canvas.width = this.canvasW * this.dpr
         this.canvas.height = this.canvasH * this.dpr
         this.ctx.scale(this.dpr, this.dpr)
+
+        this.canvasReady = true
 
         console.log('Canvas:', this.canvasW, 'x', this.canvasH, 'Cell:', this.cellSize, 'Rows:', this.rows)
 
@@ -262,15 +293,25 @@ export default {
       if (col < 0 || col >= this.cols || row < 0 || row >= this.rows) return
 
       const key = `${col},${row}`
-      if (this.pathSet.has(key)) return
-      if (this.towers.some(t => t.col === col && t.row === row)) return
+      const isPath = this.pathSet.has(key)
 
       if (this.selectedTower) {
         const def = this.towerDefs.find(t => t.type === this.selectedTower)
-        if (def && this.gold >= def.cost) {
-          this.pendingTower = { col, row, def }
-          this.askQuestion()
+        if (!def || this.gold < def.cost) return
+
+        // 堡垒只能建在路上
+        if (def.onPath) {
+          if (!isPath) return
+          // 检查是否已有堡垒
+          if (this.fortresses.some(f => f.col === col && f.row === row)) return
+        } else {
+          // 普通塔不能建在路上
+          if (isPath) return
+          if (this.towers.some(t => t.col === col && t.row === row)) return
         }
+
+        this.pendingTower = { col, row, def }
+        this.askQuestion()
       }
     },
 
@@ -307,18 +348,33 @@ export default {
 
       if (opt === this.question.answer && this.pendingTower) {
         const { col, row, def } = this.pendingTower
-        this.towers.push({
-          col, row,
-          x: col * this.cellSize + this.cellSize / 2,
-          y: row * this.cellSize + this.cellSize / 2,
-          type: def.type,
-          icon: def.icon,
-          damage: def.damage,
-          range: def.range * this.cellSize,
-          rate: def.rate,
-          slow: def.slow || 0,
-          lastFire: 0
-        })
+
+        if (def.onPath) {
+          // 堡垒
+          this.fortresses.push({
+            col, row,
+            x: col * this.cellSize + this.cellSize / 2,
+            y: row * this.cellSize + this.cellSize / 2,
+            icon: def.icon,
+            hp: def.hp,
+            blockTime: def.blockTime
+          })
+        } else {
+          // 普通塔
+          this.towers.push({
+            col, row,
+            x: col * this.cellSize + this.cellSize / 2,
+            y: row * this.cellSize + this.cellSize / 2,
+            type: def.type,
+            icon: def.icon,
+            damage: def.damage,
+            range: def.range * this.cellSize,
+            rate: def.rate,
+            slow: def.slow || 0,
+            lastFire: 0,
+            shotCount: 0 // 冰冻塔计数
+          })
+        }
         this.gold -= def.cost
         this.selectedTower = null
       }
@@ -326,6 +382,9 @@ export default {
     },
 
     spawnWave() {
+      if (this.waveSpawning) return
+      this.waveSpawning = true
+
       const count = 3 + this.wave * 2
       let delay = 0
 
@@ -351,11 +410,18 @@ export default {
             reward: def.reward,
             color: def.color,
             pathIdx: 0,
-            slowUntil: 0
+            slowUntil: 0,
+            blockedUntil: 0, // 被堡垒阻挡到什么时候
+            attackingFortress: null // 正在攻击的堡垒
           })
         }, delay)
         delay += 800
       }
+
+      // 标记生成完成
+      setTimeout(() => {
+        this.waveSpawning = false
+      }, delay)
     },
 
     gameLoop() {
@@ -372,9 +438,35 @@ export default {
     update() {
       const now = Date.now()
 
+      // 检查冰冻大招是否结束
+      if (this.freezeUltActive && now >= this.freezeUltEndTime) {
+        this.freezeUltActive = false
+      }
+
       // 更新敌人
       for (let i = this.enemies.length - 1; i >= 0; i--) {
         const e = this.enemies[i]
+
+        // 冰冻大招：完全停止移动
+        if (this.freezeUltActive) {
+          continue
+        }
+
+        // 检查是否被堡垒阻挡
+        if (e.blockedUntil > now) {
+          continue
+        }
+
+        // 如果之前在攻击堡垒，检查是否破坏完成
+        if (e.attackingFortress) {
+          const fort = e.attackingFortress
+          // 堡垒被破坏
+          const fortIdx = this.fortresses.indexOf(fort)
+          if (fortIdx !== -1) {
+            this.fortresses.splice(fortIdx, 1)
+          }
+          e.attackingFortress = null
+        }
 
         // 减速效果
         e.speed = e.slowUntil > now ? e.baseSpeed * 0.4 : e.baseSpeed
@@ -388,6 +480,15 @@ export default {
 
           if (dist < e.speed * 2) {
             e.pathIdx++
+
+            // 检查新位置是否有堡垒
+            const col = Math.floor(target.x / this.cellSize)
+            const row = Math.floor(target.y / this.cellSize)
+            const fort = this.fortresses.find(f => f.col === col && f.row === row)
+            if (fort) {
+              e.blockedUntil = now + fort.blockTime
+              e.attackingFortress = fort
+            }
           } else {
             e.x += (dx / dist) * e.speed
             e.y += (dy / dist) * e.speed
@@ -431,6 +532,16 @@ export default {
           }
           t.lastFire = now
 
+          // 冰冻塔计数
+          if (t.type === 'ice') {
+            t.shotCount++
+            // 每10弹释放大招
+            if (t.shotCount >= 10) {
+              t.shotCount = 0
+              this.triggerFreezeUlt()
+            }
+          }
+
           // 子弹效果
           this.bullets.push({
             x: t.x, y: t.y,
@@ -449,8 +560,9 @@ export default {
       }
 
       // 波次检查
-      if (this.enemies.length === 0 && !this.gameOver) {
-        if (this.wave >= 10) {
+      if (this.enemies.length === 0 && !this.waveSpawning && !this.gameOver) {
+        // 无尽模式无限波次，普通模式10波结束
+        if (this.gameMode === 'normal' && this.wave >= 10) {
           this.endGame(true)
         } else {
           this.wave++
@@ -458,6 +570,12 @@ export default {
           setTimeout(() => this.spawnWave(), 2000)
         }
       }
+    },
+
+    triggerFreezeUlt() {
+      this.freezeUltActive = true
+      this.freezeUltEndTime = Date.now() + 5000 // 5秒
+      console.log('❄️ 冰冻大招发动！')
     },
 
     render() {
@@ -494,16 +612,44 @@ export default {
 
       // 可建造区域提示
       if (this.selectedTower) {
-        ctx.fillStyle = 'rgba(76, 175, 80, 0.3)'
-        for (let r = 0; r < this.rows; r++) {
-          for (let c = 0; c < this.cols; c++) {
-            const key = `${c},${r}`
-            if (!this.pathSet.has(key) && !this.towers.some(t => t.col === c && t.row === r)) {
-              ctx.fillRect(c * cs + 2, r * cs + 2, cs - 4, cs - 4)
+        const def = this.towerDefs.find(t => t.type === this.selectedTower)
+        if (def) {
+          if (def.onPath) {
+            // 堡垒：高亮路径上可建造位置
+            ctx.fillStyle = 'rgba(255, 193, 7, 0.4)'
+            this.pathSet.forEach(key => {
+              const [col, row] = key.split(',').map(Number)
+              if (!this.fortresses.some(f => f.col === col && f.row === row)) {
+                ctx.fillRect(col * cs + 2, row * cs + 2, cs - 4, cs - 4)
+              }
+            })
+          } else {
+            // 普通塔：高亮非路径位置
+            ctx.fillStyle = 'rgba(76, 175, 80, 0.3)'
+            for (let r = 0; r < this.rows; r++) {
+              for (let c = 0; c < this.cols; c++) {
+                const key = `${c},${r}`
+                if (!this.pathSet.has(key) && !this.towers.some(t => t.col === c && t.row === r)) {
+                  ctx.fillRect(c * cs + 2, r * cs + 2, cs - 4, cs - 4)
+                }
+              }
             }
           }
         }
       }
+
+      // 堡垒
+      this.fortresses.forEach(f => {
+        ctx.fillStyle = '#8D6E63'
+        ctx.beginPath()
+        ctx.arc(f.x, f.y, cs * 0.4, 0, Math.PI * 2)
+        ctx.fill()
+
+        ctx.font = `${cs * 0.5}px Arial`
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        ctx.fillText(f.icon, f.x, f.y)
+      })
 
       // 塔
       this.towers.forEach(t => {
@@ -516,13 +662,38 @@ export default {
         ctx.textAlign = 'center'
         ctx.textBaseline = 'middle'
         ctx.fillText(t.icon, t.x, t.y)
+
+        // 冰冻塔显示大招进度
+        if (t.type === 'ice' && t.shotCount > 0) {
+          const progress = t.shotCount / 10
+          ctx.strokeStyle = '#00BCD4'
+          ctx.lineWidth = 2
+          ctx.beginPath()
+          ctx.arc(t.x, t.y, cs * 0.42, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress)
+          ctx.stroke()
+        }
       })
 
       // 敌人
       this.enemies.forEach(e => {
         const r = cs * 0.3
+        const now = Date.now()
 
-        ctx.fillStyle = e.color
+        // 被堡垒阻挡时显示攻击动画
+        if (e.blockedUntil > now) {
+          ctx.strokeStyle = '#FF5722'
+          ctx.lineWidth = 2
+          ctx.beginPath()
+          ctx.arc(e.x, e.y, r + 4, 0, Math.PI * 2)
+          ctx.stroke()
+        }
+
+        // 冰冻大招效果
+        if (this.freezeUltActive) {
+          ctx.fillStyle = '#B3E5FC'
+        } else {
+          ctx.fillStyle = e.color
+        }
         ctx.beginPath()
         ctx.arc(e.x, e.y, r, 0, Math.PI * 2)
         ctx.fill()
@@ -545,6 +716,12 @@ export default {
         ctx.lineTo(b.tx, b.ty)
         ctx.stroke()
       })
+
+      // 冰冻大招效果
+      if (this.freezeUltActive) {
+        ctx.fillStyle = 'rgba(100, 181, 246, 0.2)'
+        ctx.fillRect(0, 0, this.canvasW, this.canvasH)
+      }
     },
 
     togglePause() {
@@ -560,7 +737,7 @@ export default {
     },
 
     restart() {
-      this.startGame()
+      this.startGame(this.gameMode)
     },
 
     backToMenu() {
@@ -625,6 +802,17 @@ export default {
   margin-bottom: 20rpx;
 }
 
+.btn-endless {
+  width: 300rpx;
+  padding: 24rpx;
+  font-size: 32rpx;
+  background: linear-gradient(135deg, #FF9800, #F57C00);
+  color: #fff;
+  border: none;
+  border-radius: 16rpx;
+  margin-bottom: 20rpx;
+}
+
 .btn-back {
   width: 300rpx;
   padding: 24rpx;
@@ -673,6 +861,23 @@ export default {
   display: block;
 }
 
+.ult-hint {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(33, 150, 243, 0.9);
+  padding: 20rpx 40rpx;
+  border-radius: 20rpx;
+  z-index: 50;
+}
+
+.ult-hint text {
+  color: #fff;
+  font-size: 32rpx;
+  font-weight: bold;
+}
+
 .tower-bar {
   display: flex;
   justify-content: space-around;
@@ -685,7 +890,7 @@ export default {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 12rpx 24rpx;
+  padding: 12rpx 16rpx;
   background: rgba(255,255,255,0.1);
   border-radius: 12rpx;
   border: 3rpx solid transparent;
@@ -701,11 +906,11 @@ export default {
 }
 
 .tower-icon {
-  font-size: 40rpx;
+  font-size: 36rpx;
 }
 
 .tower-cost {
-  font-size: 22rpx;
+  font-size: 20rpx;
   color: #FFD700;
   margin-top: 4rpx;
 }
