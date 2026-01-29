@@ -55,15 +55,23 @@
     <!-- 数学题弹窗 -->
     <view v-if="showQuestion" class="modal">
       <view class="modal-box">
+        <text class="q-type">{{ question.type }}</text>
         <text class="q-text">{{ question.text }}</text>
         <view class="q-options">
           <view
             v-for="(opt, i) in question.options"
             :key="i"
             class="q-opt"
+            :class="{
+              correct: answerFeedback && opt === question.answer,
+              wrong: answerFeedback && selectedAnswer === opt && opt !== question.answer
+            }"
             @click="answer(opt)"
           >{{ opt }}</view>
         </view>
+        <text v-if="answerFeedback" class="feedback" :class="answerFeedback">
+          {{ answerFeedback === 'correct' ? '✓ 回答正确！' : '✗ 回答错误' }}
+        </text>
       </view>
     </view>
 
@@ -72,6 +80,7 @@
       <view class="modal-box">
         <text class="modal-title">{{ win ? '🎉 胜利!' : '💀 失败' }}</text>
         <text class="modal-info">通过 {{ wave }} 波</text>
+        <text class="modal-info">正确率: {{ accuracy }}%</text>
         <button class="btn-start" @click="restart">再来一次</button>
         <button class="btn-back" @click="backToMenu">返回菜单</button>
       </view>
@@ -84,7 +93,7 @@ export default {
   data() {
     return {
       screen: 'menu',
-      gameMode: 'normal', // 'normal' or 'endless'
+      gameMode: 'normal',
 
       // 画布
       canvas: null,
@@ -115,15 +124,21 @@ export default {
       towers: [],
       enemies: [],
       bullets: [],
-      fortresses: [], // 堡垒
+      fortresses: [],
 
       // 选择
       selectedTower: null,
 
       // 数学题
       showQuestion: false,
-      question: { text: '', answer: 0, options: [] },
+      question: { text: '', answer: 0, options: [], type: '' },
       pendingTower: null,
+      answerFeedback: null,
+      selectedAnswer: null,
+
+      // 统计
+      totalQuestions: 0,
+      correctAnswers: 0,
 
       // 冰冻大招
       freezeUltActive: false,
@@ -138,13 +153,20 @@ export default {
         { type: 'fortress', icon: '🏯', cost: 30, onPath: true, hp: 1, blockTime: 3000 }
       ],
 
-      // 敌人定义 - 速度降低
+      // 敌人定义
       enemyDefs: {
         normal: { hp: 40, speed: 0.4, reward: 10, color: '#4CAF50' },
         fast: { hp: 25, speed: 0.7, reward: 15, color: '#2196F3' },
         tank: { hp: 100, speed: 0.2, reward: 25, color: '#795548' },
         boss: { hp: 300, speed: 0.15, reward: 80, color: '#f44336' }
       }
+    }
+  },
+
+  computed: {
+    accuracy() {
+      if (this.totalQuestions === 0) return 0
+      return Math.round((this.correctAnswers / this.totalQuestions) * 100)
     }
   },
 
@@ -170,6 +192,12 @@ export default {
       this.waveSpawning = false
       this.freezeUltActive = false
       this.freezeUltEndTime = 0
+      this.totalQuestions = 0
+      this.correctAnswers = 0
+      this.answerFeedback = null
+      this.selectedAnswer = null
+
+      // 重置画布状态以确保重新初始化
       this.canvasReady = false
 
       this.$nextTick(() => {
@@ -178,14 +206,6 @@ export default {
     },
 
     initCanvas() {
-      // 如果画布已经初始化过，直接开始游戏
-      if (this.canvasReady && this.canvas && this.ctx) {
-        this.generatePath()
-        this.spawnWave()
-        this.gameLoop()
-        return
-      }
-
       const query = uni.createSelectorQuery().in(this)
       query.select('#canvasWrap').boundingClientRect()
       query.select('#gameCanvas').fields({ node: true, size: true })
@@ -215,9 +235,10 @@ export default {
         this.canvasW = this.cols * this.cellSize
         this.canvasH = this.rows * this.cellSize
 
-        // 设置画布
+        // 设置画布 - 重置变换以避免累积缩放
         this.canvas.width = this.canvasW * this.dpr
         this.canvas.height = this.canvasH * this.dpr
+        this.ctx.setTransform(1, 0, 0, 1, 0, 0) // 重置变换
         this.ctx.scale(this.dpr, this.dpr)
 
         this.canvasReady = true
@@ -299,13 +320,10 @@ export default {
         const def = this.towerDefs.find(t => t.type === this.selectedTower)
         if (!def || this.gold < def.cost) return
 
-        // 堡垒只能建在路上
         if (def.onPath) {
           if (!isPath) return
-          // 检查是否已有堡垒
           if (this.fortresses.some(f => f.col === col && f.row === row)) return
         } else {
-          // 普通塔不能建在路上
           if (isPath) return
           if (this.towers.some(t => t.col === col && t.row === row)) return
         }
@@ -315,70 +333,183 @@ export default {
       }
     },
 
+    // 生成五年级上册难度的数学题
     askQuestion() {
-      const a = Math.floor(Math.random() * 10) + 1
-      const b = Math.floor(Math.random() * 10) + 1
-      const ops = ['+', '-', '×']
-      const op = ops[Math.floor(Math.random() * ops.length)]
+      this.answerFeedback = null
+      this.selectedAnswer = null
 
-      let answer
-      if (op === '+') answer = a + b
-      else if (op === '-') answer = Math.max(a, b) - Math.min(a, b)
-      else answer = a * b
+      const questionTypes = [
+        this.genDecimalMultiply,    // 小数乘法
+        this.genDecimalDivide,      // 小数除法
+        this.genSimpleEquation,     // 简易方程
+        this.genAreaQuestion,       // 面积计算
+        this.genFractionBasic       // 分数基础
+      ]
 
-      const text = op === '-' ? `${Math.max(a,b)} ${op} ${Math.min(a,b)} = ?` : `${a} ${op} ${b} = ?`
+      const generator = questionTypes[Math.floor(Math.random() * questionTypes.length)]
+      const q = generator.call(this)
 
-      const options = [answer]
-      while (options.length < 4) {
-        const wrong = answer + Math.floor(Math.random() * 10) - 5
-        if (wrong !== answer && wrong > 0 && !options.includes(wrong)) {
-          options.push(wrong)
-        }
-      }
-      options.sort(() => Math.random() - 0.5)
-
-      this.question = { text, answer, options }
+      this.question = q
       this.showQuestion = true
       this.paused = true
     },
 
-    answer(opt) {
-      this.showQuestion = false
-      this.paused = false
-
-      if (opt === this.question.answer && this.pendingTower) {
-        const { col, row, def } = this.pendingTower
-
-        if (def.onPath) {
-          // 堡垒
-          this.fortresses.push({
-            col, row,
-            x: col * this.cellSize + this.cellSize / 2,
-            y: row * this.cellSize + this.cellSize / 2,
-            icon: def.icon,
-            hp: def.hp,
-            blockTime: def.blockTime
-          })
-        } else {
-          // 普通塔
-          this.towers.push({
-            col, row,
-            x: col * this.cellSize + this.cellSize / 2,
-            y: row * this.cellSize + this.cellSize / 2,
-            type: def.type,
-            icon: def.icon,
-            damage: def.damage,
-            range: def.range * this.cellSize,
-            rate: def.rate,
-            slow: def.slow || 0,
-            lastFire: 0,
-            shotCount: 0 // 冰冻塔计数
-          })
-        }
-        this.gold -= def.cost
-        this.selectedTower = null
+    // 小数乘法
+    genDecimalMultiply() {
+      const a = (Math.floor(Math.random() * 90) + 10) / 10 // 1.0 - 9.9
+      const b = Math.floor(Math.random() * 9) + 2 // 2-10
+      const answer = Math.round(a * b * 10) / 10
+      const text = `${a} × ${b} = ?`
+      return {
+        type: '小数乘法',
+        text,
+        answer,
+        options: this.genOptions(answer, true)
       }
-      this.pendingTower = null
+    },
+
+    // 小数除法
+    genDecimalDivide() {
+      const b = Math.floor(Math.random() * 4) + 2 // 2-5
+      const answer = (Math.floor(Math.random() * 40) + 10) / 10 // 1.0-4.9
+      const a = Math.round(answer * b * 10) / 10
+      const text = `${a} ÷ ${b} = ?`
+      return {
+        type: '小数除法',
+        text,
+        answer,
+        options: this.genOptions(answer, true)
+      }
+    },
+
+    // 简易方程
+    genSimpleEquation() {
+      const answer = Math.floor(Math.random() * 20) + 5 // 5-24
+      const b = Math.floor(Math.random() * 10) + 5 // 5-14
+      const c = answer + b
+      const text = `x + ${b} = ${c}，x = ?`
+      return {
+        type: '简易方程',
+        text,
+        answer,
+        options: this.genOptions(answer, false)
+      }
+    },
+
+    // 面积计算
+    genAreaQuestion() {
+      const types = ['rectangle', 'triangle', 'parallelogram']
+      const type = types[Math.floor(Math.random() * types.length)]
+
+      let text, answer
+      if (type === 'rectangle') {
+        const l = Math.floor(Math.random() * 8) + 3 // 3-10
+        const w = Math.floor(Math.random() * 6) + 2 // 2-7
+        answer = l * w
+        text = `长方形：长${l}cm，宽${w}cm，面积=?cm²`
+      } else if (type === 'triangle') {
+        const base = Math.floor(Math.random() * 6) + 4 // 4-9 (偶数便于计算)
+        const h = Math.floor(Math.random() * 4) + 2 // 2-5
+        answer = (base * h) / 2
+        text = `三角形：底${base}cm，高${h}cm，面积=?cm²`
+      } else {
+        const base = Math.floor(Math.random() * 6) + 3 // 3-8
+        const h = Math.floor(Math.random() * 5) + 2 // 2-6
+        answer = base * h
+        text = `平行四边形：底${base}cm，高${h}cm，面积=?cm²`
+      }
+
+      return {
+        type: '面积计算',
+        text,
+        answer,
+        options: this.genOptions(answer, false)
+      }
+    },
+
+    // 分数基础
+    genFractionBasic() {
+      const denominator = [2, 4, 5, 10][Math.floor(Math.random() * 4)]
+      const numerator = Math.floor(Math.random() * (denominator - 1)) + 1
+      const answer = Math.round((numerator / denominator) * 100) / 100
+      const text = `${numerator}/${denominator} = ? (小数)`
+      return {
+        type: '分数转小数',
+        text,
+        answer,
+        options: this.genOptions(answer, true)
+      }
+    },
+
+    // 生成选项
+    genOptions(answer, isDecimal) {
+      const options = [answer]
+      const range = isDecimal ? 2 : 10
+
+      while (options.length < 4) {
+        let wrong
+        if (isDecimal) {
+          wrong = Math.round((answer + (Math.random() * range * 2 - range)) * 10) / 10
+        } else {
+          wrong = answer + Math.floor(Math.random() * range * 2) - range
+        }
+        if (wrong !== answer && wrong > 0 && !options.includes(wrong)) {
+          options.push(wrong)
+        }
+      }
+      return options.sort(() => Math.random() - 0.5)
+    },
+
+    answer(opt) {
+      this.totalQuestions++
+      this.selectedAnswer = opt
+
+      const isCorrect = opt === this.question.answer
+      this.answerFeedback = isCorrect ? 'correct' : 'wrong'
+
+      if (isCorrect) {
+        this.correctAnswers++
+      }
+
+      // 延迟关闭弹窗，显示反馈
+      setTimeout(() => {
+        this.showQuestion = false
+        this.paused = false
+        this.answerFeedback = null
+        this.selectedAnswer = null
+
+        if (isCorrect && this.pendingTower) {
+          const { col, row, def } = this.pendingTower
+
+          if (def.onPath) {
+            this.fortresses.push({
+              col, row,
+              x: col * this.cellSize + this.cellSize / 2,
+              y: row * this.cellSize + this.cellSize / 2,
+              icon: def.icon,
+              hp: def.hp,
+              blockTime: def.blockTime
+            })
+          } else {
+            this.towers.push({
+              col, row,
+              x: col * this.cellSize + this.cellSize / 2,
+              y: row * this.cellSize + this.cellSize / 2,
+              type: def.type,
+              icon: def.icon,
+              damage: def.damage,
+              range: def.range * this.cellSize,
+              rate: def.rate,
+              slow: def.slow || 0,
+              lastFire: 0,
+              shotCount: 0
+            })
+          }
+          this.gold -= def.cost
+          this.selectedTower = null
+        }
+        this.pendingTower = null
+      }, 800)
     },
 
     spawnWave() {
@@ -411,14 +542,13 @@ export default {
             color: def.color,
             pathIdx: 0,
             slowUntil: 0,
-            blockedUntil: 0, // 被堡垒阻挡到什么时候
-            attackingFortress: null // 正在攻击的堡垒
+            blockedUntil: 0,
+            attackingFortress: null
           })
         }, delay)
-        delay += 800
+        delay += 1500 // 增加敌人生成间隔：800 -> 1500
       }
 
-      // 标记生成完成
       setTimeout(() => {
         this.waveSpawning = false
       }, delay)
@@ -438,29 +568,23 @@ export default {
     update() {
       const now = Date.now()
 
-      // 检查冰冻大招是否结束
       if (this.freezeUltActive && now >= this.freezeUltEndTime) {
         this.freezeUltActive = false
       }
 
-      // 更新敌人
       for (let i = this.enemies.length - 1; i >= 0; i--) {
         const e = this.enemies[i]
 
-        // 冰冻大招：完全停止移动
         if (this.freezeUltActive) {
           continue
         }
 
-        // 检查是否被堡垒阻挡
         if (e.blockedUntil > now) {
           continue
         }
 
-        // 如果之前在攻击堡垒，检查是否破坏完成
         if (e.attackingFortress) {
           const fort = e.attackingFortress
-          // 堡垒被破坏
           const fortIdx = this.fortresses.indexOf(fort)
           if (fortIdx !== -1) {
             this.fortresses.splice(fortIdx, 1)
@@ -468,10 +592,8 @@ export default {
           e.attackingFortress = null
         }
 
-        // 减速效果
         e.speed = e.slowUntil > now ? e.baseSpeed * 0.4 : e.baseSpeed
 
-        // 移动
         if (e.pathIdx < this.path.length - 1) {
           const target = this.path[e.pathIdx + 1]
           const dx = target.x - e.x
@@ -481,7 +603,6 @@ export default {
           if (dist < e.speed * 2) {
             e.pathIdx++
 
-            // 检查新位置是否有堡垒
             const col = Math.floor(target.x / this.cellSize)
             const row = Math.floor(target.y / this.cellSize)
             const fort = this.fortresses.find(f => f.col === col && f.row === row)
@@ -494,7 +615,6 @@ export default {
             e.y += (dy / dist) * e.speed
           }
         } else {
-          // 到达终点
           this.lives--
           this.enemies.splice(i, 1)
           if (this.lives <= 0) {
@@ -503,14 +623,12 @@ export default {
           continue
         }
 
-        // 死亡
         if (e.hp <= 0) {
           this.gold += e.reward
           this.enemies.splice(i, 1)
         }
       }
 
-      // 塔攻击
       this.towers.forEach(t => {
         if (now - t.lastFire < t.rate) return
 
@@ -532,17 +650,14 @@ export default {
           }
           t.lastFire = now
 
-          // 冰冻塔计数
           if (t.type === 'ice') {
             t.shotCount++
-            // 每10弹释放大招
             if (t.shotCount >= 10) {
               t.shotCount = 0
               this.triggerFreezeUlt()
             }
           }
 
-          // 子弹效果
           this.bullets.push({
             x: t.x, y: t.y,
             tx: target.x, ty: target.y,
@@ -551,7 +666,6 @@ export default {
         }
       })
 
-      // 更新子弹
       for (let i = this.bullets.length - 1; i >= 0; i--) {
         this.bullets[i].life--
         if (this.bullets[i].life <= 0) {
@@ -559,9 +673,7 @@ export default {
         }
       }
 
-      // 波次检查
       if (this.enemies.length === 0 && !this.waveSpawning && !this.gameOver) {
-        // 无尽模式无限波次，普通模式10波结束
         if (this.gameMode === 'normal' && this.wave >= 10) {
           this.endGame(true)
         } else {
@@ -574,8 +686,7 @@ export default {
 
     triggerFreezeUlt() {
       this.freezeUltActive = true
-      this.freezeUltEndTime = Date.now() + 5000 // 5秒
-      console.log('❄️ 冰冻大招发动！')
+      this.freezeUltEndTime = Date.now() + 5000
     },
 
     render() {
@@ -583,11 +694,9 @@ export default {
       const ctx = this.ctx
       const cs = this.cellSize
 
-      // 清空
       ctx.fillStyle = '#1a472a'
       ctx.fillRect(0, 0, this.canvasW, this.canvasH)
 
-      // 网格
       ctx.strokeStyle = 'rgba(255,255,255,0.1)'
       ctx.lineWidth = 1
       for (let i = 0; i <= this.cols; i++) {
@@ -603,19 +712,16 @@ export default {
         ctx.stroke()
       }
 
-      // 路径
       ctx.fillStyle = '#5D4037'
       this.pathSet.forEach(key => {
         const [col, row] = key.split(',').map(Number)
         ctx.fillRect(col * cs + 2, row * cs + 2, cs - 4, cs - 4)
       })
 
-      // 可建造区域提示
       if (this.selectedTower) {
         const def = this.towerDefs.find(t => t.type === this.selectedTower)
         if (def) {
           if (def.onPath) {
-            // 堡垒：高亮路径上可建造位置
             ctx.fillStyle = 'rgba(255, 193, 7, 0.4)'
             this.pathSet.forEach(key => {
               const [col, row] = key.split(',').map(Number)
@@ -624,7 +730,6 @@ export default {
               }
             })
           } else {
-            // 普通塔：高亮非路径位置
             ctx.fillStyle = 'rgba(76, 175, 80, 0.3)'
             for (let r = 0; r < this.rows; r++) {
               for (let c = 0; c < this.cols; c++) {
@@ -638,7 +743,6 @@ export default {
         }
       }
 
-      // 堡垒
       this.fortresses.forEach(f => {
         ctx.fillStyle = '#8D6E63'
         ctx.beginPath()
@@ -651,7 +755,6 @@ export default {
         ctx.fillText(f.icon, f.x, f.y)
       })
 
-      // 塔
       this.towers.forEach(t => {
         ctx.fillStyle = '#333'
         ctx.beginPath()
@@ -663,7 +766,6 @@ export default {
         ctx.textBaseline = 'middle'
         ctx.fillText(t.icon, t.x, t.y)
 
-        // 冰冻塔显示大招进度
         if (t.type === 'ice' && t.shotCount > 0) {
           const progress = t.shotCount / 10
           ctx.strokeStyle = '#00BCD4'
@@ -674,12 +776,10 @@ export default {
         }
       })
 
-      // 敌人
       this.enemies.forEach(e => {
         const r = cs * 0.3
         const now = Date.now()
 
-        // 被堡垒阻挡时显示攻击动画
         if (e.blockedUntil > now) {
           ctx.strokeStyle = '#FF5722'
           ctx.lineWidth = 2
@@ -688,7 +788,6 @@ export default {
           ctx.stroke()
         }
 
-        // 冰冻大招效果
         if (this.freezeUltActive) {
           ctx.fillStyle = '#B3E5FC'
         } else {
@@ -698,7 +797,6 @@ export default {
         ctx.arc(e.x, e.y, r, 0, Math.PI * 2)
         ctx.fill()
 
-        // 血条
         const hpW = cs * 0.6
         const hpH = 4
         ctx.fillStyle = '#333'
@@ -707,7 +805,6 @@ export default {
         ctx.fillRect(e.x - hpW / 2, e.y - r - 8, hpW * (e.hp / e.maxHp), hpH)
       })
 
-      // 子弹
       ctx.strokeStyle = '#FFD700'
       ctx.lineWidth = 2
       this.bullets.forEach(b => {
@@ -717,7 +814,6 @@ export default {
         ctx.stroke()
       })
 
-      // 冰冻大招效果
       if (this.freezeUltActive) {
         ctx.fillStyle = 'rgba(100, 181, 246, 0.2)'
         ctx.fillRect(0, 0, this.canvasW, this.canvasH)
@@ -762,7 +858,6 @@ export default {
   overflow: hidden;
 }
 
-/* 菜单 */
 .menu {
   width: 100%;
   height: 100%;
@@ -823,7 +918,6 @@ export default {
   border-radius: 16rpx;
 }
 
-/* 游戏 */
 .game {
   width: 100%;
   height: 100%;
@@ -915,7 +1009,6 @@ export default {
   margin-top: 4rpx;
 }
 
-/* 弹窗 */
 .modal {
   position: fixed;
   top: 0;
@@ -933,8 +1026,8 @@ export default {
   background: #16213e;
   padding: 40rpx;
   border-radius: 20rpx;
-  width: 80%;
-  max-width: 500rpx;
+  width: 85%;
+  max-width: 560rpx;
   text-align: center;
 }
 
@@ -949,15 +1042,26 @@ export default {
   display: block;
   font-size: 28rpx;
   color: #aaa;
-  margin-bottom: 30rpx;
+  margin-bottom: 16rpx;
+}
+
+.q-type {
+  display: block;
+  font-size: 24rpx;
+  color: #4CAF50;
+  margin-bottom: 16rpx;
+  background: rgba(76, 175, 80, 0.2);
+  padding: 8rpx 20rpx;
+  border-radius: 20rpx;
 }
 
 .q-text {
   display: block;
-  font-size: 40rpx;
+  font-size: 36rpx;
   color: #fff;
   margin-bottom: 30rpx;
   font-weight: bold;
+  line-height: 1.4;
 }
 
 .q-options {
@@ -972,5 +1076,31 @@ export default {
   background: rgba(255,255,255,0.1);
   color: #fff;
   border-radius: 12rpx;
+  transition: all 0.2s;
+}
+
+.q-opt.correct {
+  background: rgba(76, 175, 80, 0.8);
+  color: #fff;
+}
+
+.q-opt.wrong {
+  background: rgba(244, 67, 54, 0.8);
+  color: #fff;
+}
+
+.feedback {
+  display: block;
+  margin-top: 20rpx;
+  font-size: 28rpx;
+  font-weight: bold;
+}
+
+.feedback.correct {
+  color: #4CAF50;
+}
+
+.feedback.wrong {
+  color: #f44336;
 }
 </style>
