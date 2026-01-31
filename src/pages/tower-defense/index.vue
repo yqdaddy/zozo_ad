@@ -282,7 +282,7 @@ export default {
       selectedOption: null,
       mathCallback: null,
 
-      // 游戏结果
+      // 工具结果
       gameResult: {
         win: false,
         wave: 0,
@@ -350,13 +350,13 @@ export default {
           height: this.canvasHeight
         })
 
-        // 创建游戏实例
+        // 创建工具实例
         this.game = new Game(this.canvasAdapter)
 
-        // 监听游戏事件
+        // 监听工具事件
         this.setupGameEvents()
 
-        // 初始化并启动游戏
+        // 初始化并启动工具
         this.game.init()
         this.game.start()
       } catch (error) {
@@ -391,7 +391,7 @@ export default {
         uni.showToast({ title, icon, duration: 1000 })
       })
 
-      // 游戏结束
+      // 工具结束
       this.game.events.on('gameover', (result) => {
         this.gameResult = result
         this.showGameOverModal = true
@@ -662,7 +662,7 @@ export default {
   font-size: 24rpx;
 }
 
-/* 游戏界面样式 */
+/* 工具界面样式 */
 .game-screen {
   height: 100vh;
   overflow: hidden;
@@ -921,7 +921,7 @@ export default {
   color: #F44336;
 }
 
-/* 游戏结束样式 */
+/* 工具结束样式 */
 .star-rating {
   display: flex;
   justify-content: center;
