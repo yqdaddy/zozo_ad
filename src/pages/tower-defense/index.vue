@@ -354,6 +354,7 @@ export default {
     },
 
     showWaveAnnounce() {
+      this.waveSpawning = true // 防止波次检查过早触发
       this.showWaveHint = true
       this.waveHintFading = false
       setTimeout(() => {
