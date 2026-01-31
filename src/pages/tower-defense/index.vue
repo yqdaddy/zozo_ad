@@ -12,7 +12,7 @@
               v-for="(lv, i) in levels"
               :key="i"
               class="level-btn"
-              :class="{ locked: i > unlockedLevel }"
+              :class="{ locked: i > unlockedLevel, selected: i === selectedLevel }"
               @click="selectLevel(i)"
             >
               <text class="level-icon">{{ i <= unlockedLevel ? lv.icon : '🔒' }}</text>
@@ -685,8 +685,7 @@ export default {
     },
 
     spawnWave() {
-      if (this.waveSpawning || this.gameOver) return
-      this.waveSpawning = true
+      if (this.gameOver) return
 
       const level = this.levels[this.selectedLevel]
       const mult = this.gameMode === 'endless' ? 1 + (this.wave - 1) * 0.1 : level.enemyMult
@@ -1021,6 +1020,7 @@ export default {
 .level-label { display: block; color: #aaa; font-size: 26rpx; margin-bottom: 16rpx; }
 .levels { display: flex; justify-content: center; gap: 16rpx; flex-wrap: wrap; }
 .level-btn { padding: 16rpx 20rpx; background: rgba(255,255,255,0.1); border-radius: 12rpx; border: 2rpx solid transparent; }
+.level-btn.selected { border-color: #4CAF50; background: rgba(76, 175, 80, 0.3); }
 .level-btn.locked { opacity: 0.4; }
 .level-icon { display: block; font-size: 32rpx; }
 .level-name { display: block; font-size: 22rpx; color: #fff; margin-top: 4rpx; }
