@@ -39,9 +39,12 @@ export class CanvasAdapter {
       // 是否填满可用空间
       fillContainer = true,
       // 最大重试次数
-      maxRetries = 5,
+      maxRetries = 10,
       // 重试间隔（毫秒）
-      retryInterval = 100
+      retryInterval = 50,
+      // 期望的尺寸（如果传入则使用，避免从 DOM 获取不准确）
+      width = 0,
+      height = 0
     } = options
 
     // 1. 获取系统信息
@@ -49,13 +52,19 @@ export class CanvasAdapter {
     this.dpr = sysInfo.pixelRatio || 2
 
     // 2. 计算可用空间
-    const containerInfo = await this._getContainerSize(component, canvasId, maxRetries, retryInterval)
-    if (!containerInfo) {
-      throw new Error('Canvas container not found')
+    if (width > 0 && height > 0) {
+      // 使用传入的期望尺寸
+      this.cssWidth = width
+      this.cssHeight = height
+    } else {
+      // 从 DOM 获取容器尺寸
+      const containerInfo = await this._getContainerSize(component, canvasId, maxRetries, retryInterval)
+      if (!containerInfo) {
+        throw new Error('Canvas container not found')
+      }
+      this.cssWidth = containerInfo.width
+      this.cssHeight = containerInfo.height
     }
-
-    this.cssWidth = containerInfo.width
-    this.cssHeight = containerInfo.height
 
     // 3. 计算逻辑尺寸（保持宽高比或填满）
     if (fillContainer) {
@@ -67,8 +76,8 @@ export class CanvasAdapter {
     this.physicalWidth = Math.floor(this.cssWidth * this.dpr)
     this.physicalHeight = Math.floor(this.cssHeight * this.dpr)
 
-    // 5. 获取 Canvas 节点并配置
-    await this._setupCanvas(component, canvasId)
+    // 5. 获取 Canvas 节点并配置（带重试）
+    await this._setupCanvasWithRetry(component, canvasId, maxRetries, retryInterval)
 
     // 6. 计算坐标转换比例
     this._updateScale()
@@ -115,31 +124,39 @@ export class CanvasAdapter {
   }
 
   /**
-   * 设置 Canvas 节点
+   * 设置 Canvas 节点（带重试）
    */
-  _setupCanvas(component, canvasId) {
+  _setupCanvasWithRetry(component, canvasId, maxRetries, retryInterval) {
     return new Promise((resolve, reject) => {
-      const query = uni.createSelectorQuery().in(component)
-      query.select(`#${canvasId}`)
-        .fields({ node: true, size: true })
-        .exec((res) => {
-          if (!res || !res[0] || !res[0].node) {
-            reject(new Error('Canvas node not found'))
-            return
-          }
+      let retries = 0
 
-          this.canvas = res[0].node
-          this.ctx = this.canvas.getContext('2d')
+      const trySetup = () => {
+        const query = uni.createSelectorQuery().in(component)
+        query.select(`#${canvasId}`)
+          .fields({ node: true, size: true })
+          .exec((res) => {
+            if (res && res[0] && res[0].node) {
+              this.canvas = res[0].node
+              this.ctx = this.canvas.getContext('2d')
 
-          // 设置物理像素尺寸
-          this.canvas.width = this.physicalWidth
-          this.canvas.height = this.physicalHeight
+              // 设置物理像素尺寸
+              this.canvas.width = this.physicalWidth
+              this.canvas.height = this.physicalHeight
 
-          // 应用 DPR 缩放
-          this.ctx.scale(this.dpr, this.dpr)
+              // 应用 DPR 缩放
+              this.ctx.scale(this.dpr, this.dpr)
 
-          resolve()
-        })
+              resolve()
+            } else if (retries < maxRetries) {
+              retries++
+              setTimeout(trySetup, retryInterval)
+            } else {
+              reject(new Error('Canvas node not found after retries'))
+            }
+          })
+      }
+
+      trySetup()
     })
   }
 

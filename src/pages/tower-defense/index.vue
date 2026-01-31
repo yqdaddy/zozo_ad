@@ -337,12 +337,17 @@ export default {
         this.canvasWidth = screenWidth
         this.canvasHeight = screenHeight - headerHeight - tipHeight - towerBarHeight - safeBottom - 20
 
+        // 等待 DOM 更新，确保 Canvas 尺寸正确
         await this.$nextTick()
+        // 额外等待一帧，确保浏览器完成布局
+        await new Promise(resolve => setTimeout(resolve, 50))
 
-        // 初始化 Canvas 适配器
+        // 初始化 Canvas 适配器，传入期望尺寸避免获取不准确
         this.canvasAdapter = new CanvasAdapter()
         await this.canvasAdapter.init(this, 'gameCanvas', {
-          fillContainer: true
+          fillContainer: true,
+          width: this.canvasWidth,
+          height: this.canvasHeight
         })
 
         // 创建游戏实例
