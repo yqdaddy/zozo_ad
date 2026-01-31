@@ -1,5 +1,5 @@
 /**
- * 游戏循环 - 包含 deltaTime 机制
+ * 工具循环 - 包含 deltaTime 机制
  */
 export class GameLoop {
   constructor(game) {
@@ -20,7 +20,7 @@ export class GameLoop {
   }
 
   /**
-   * 开始游戏循环
+   * 开始工具循环
    */
   start() {
     this.running = true
@@ -30,14 +30,14 @@ export class GameLoop {
   }
 
   /**
-   * 暂停游戏循环（继续渲染但不更新）
+   * 暂停工具循环（继续渲染但不更新）
    */
   pause() {
     this.paused = true
   }
 
   /**
-   * 恢复游戏循环
+   * 恢复工具循环
    */
   resume() {
     this.paused = false
@@ -45,7 +45,7 @@ export class GameLoop {
   }
 
   /**
-   * 停止游戏循环
+   * 停止工具循环
    */
   stop() {
     this.running = false
@@ -56,7 +56,7 @@ export class GameLoop {
   }
 
   /**
-   * 游戏循环主体
+   * 工具循环主体
    */
   loop() {
     if (!this.running) return

@@ -8,7 +8,7 @@ export class CanvasAdapter {
     this.ctx = null
     this.dpr = 1
 
-    // 逻辑尺寸（用于游戏计算）
+    // 逻辑尺寸（用于工具计算）
     this.logicWidth = 0
     this.logicHeight = 0
 

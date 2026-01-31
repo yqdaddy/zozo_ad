@@ -6,8 +6,8 @@
         <text class="title">🏰 数学塔防</text>
         <text class="subtitle">五年级上册</text>
         <view class="menu-buttons">
-          <button class="btn btn-primary" @click="startGame">开始游戏</button>
-          <button class="btn btn-secondary" @click="showHelp = true">游戏说明</button>
+          <button class="btn btn-primary" @click="startGame">开始工具</button>
+          <button class="btn btn-secondary" @click="showHelp = true">工具说明</button>
           <button class="btn btn-secondary" @click="goBack">返回首页</button>
         </view>
         <view class="knowledge-tags">
@@ -19,7 +19,7 @@
       </view>
     </view>
 
-    <!-- 游戏界面 -->
+    <!-- 工具界面 -->
     <view v-if="screen === 'game'" class="screen game-screen">
       <!-- 顶部信息栏 -->
       <view class="game-header safe-area-top">
@@ -42,7 +42,7 @@
         <text class="combo-multiplier">x{{ comboInfo.multiplier.toFixed(1) }} 奖励</text>
       </view>
 
-      <!-- 游戏画布 -->
+      <!-- 工具画布 -->
       <view class="canvas-wrapper" id="canvasWrapper">
         <canvas
           id="gameCanvas"
@@ -116,16 +116,16 @@
     <!-- 暂停弹窗 -->
     <view v-if="showPauseModal" class="modal">
       <view class="modal-content">
-        <text class="modal-title">游戏暂停</text>
+        <text class="modal-title">工具暂停</text>
         <view class="modal-buttons">
-          <button class="btn btn-primary" @click="resumeGame">继续游戏</button>
+          <button class="btn btn-primary" @click="resumeGame">继续工具</button>
           <button class="btn btn-secondary" @click="restartGame">重新开始</button>
           <button class="btn btn-secondary" @click="quitGame">返回菜单</button>
         </view>
       </view>
     </view>
 
-    <!-- 游戏结束弹窗 -->
+    <!-- 工具结束弹窗 -->
     <view v-if="showGameOverModal" class="modal game-over-modal">
       <view class="modal-content">
         <text class="result-title">{{ gameResult.win ? '🎉 胜利！' : '💪 挑战结束' }}</text>
@@ -199,9 +199,9 @@
     <!-- 帮助弹窗 -->
     <view v-if="showHelp" class="modal" @click.self="showHelp = false">
       <view class="modal-content help-content">
-        <text class="modal-title">游戏说明</text>
+        <text class="modal-title">工具说明</text>
         <view class="help-section">
-          <text class="help-title">🎯 游戏目标</text>
+          <text class="help-title">🎯 工具目标</text>
           <text class="help-text">阻止怪物到达终点！答对数学题获得金币，建造防御塔消灭敌人。</text>
         </view>
         <view class="help-section">
@@ -242,11 +242,11 @@ export default {
       showPauseModal: false,
       showGameOverModal: false,
 
-      // 游戏实例
+      // 工具实例
       game: null,
       canvasAdapter: null,
 
-      // 游戏状态（从 Game 同步）
+      // 工具状态（从 Game 同步）
       gameState: {
         lives: 20,
         gold: 100,

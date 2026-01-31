@@ -1,5 +1,5 @@
 /**
- * 游戏主控制器
+ * 工具主控制器
  */
 import { GameLoop } from './GameLoop.js'
 import { EventBus } from './EventBus.js'
@@ -24,7 +24,7 @@ export class Game {
     // 事件总线
     this.events = new EventBus()
 
-    // 游戏状态
+    // 工具状态
     this.state = {
       lives: 20,
       gold: 100,
@@ -62,12 +62,12 @@ export class Game {
     this.difficultySystem = new DifficultySystem(this)
     this.achievementSystem = new AchievementSystem(this)
 
-    // 游戏循环
+    // 工具循环
     this.gameLoop = new GameLoop(this)
   }
 
   /**
-   * 初始化游戏
+   * 初始化工具
    */
   init() {
     // 根据画布尺寸计算网格
@@ -83,7 +83,7 @@ export class Game {
   }
 
   /**
-   * 开始游戏
+   * 开始工具
    */
   start() {
     this.reset()
@@ -93,7 +93,7 @@ export class Game {
   }
 
   /**
-   * 重置游戏状态
+   * 重置工具状态
    */
   reset() {
     this.state = {
@@ -571,7 +571,7 @@ export class Game {
   }
 
   /**
-   * 游戏结束
+   * 工具结束
    */
   gameOver(win = false) {
     this.state.isGameOver = true
@@ -604,7 +604,7 @@ export class Game {
   }
 
   /**
-   * 销毁游戏
+   * 销毁工具
    */
   destroy() {
     this.gameLoop.stop()

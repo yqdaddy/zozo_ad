@@ -1,5 +1,5 @@
 /**
- * 数学塔防游戏 - 入口文件
+ * 数学塔防工具 - 入口文件
  */
 export { Game } from './core/Game.js'
 export { GameLoop } from './core/GameLoop.js'

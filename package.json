@@ -1,7 +1,7 @@
 {
   "name": "math-games-collection",
   "version": "1.0.0",
-  "description": "数学游戏集合 - 支持多端发布",
+  "description": "数学工具集合 - 支持多端发布",
   "scripts": {
     "dev": "uni",
     "dev:h5": "uni --platform h5",
