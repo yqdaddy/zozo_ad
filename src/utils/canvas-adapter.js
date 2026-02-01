@@ -177,25 +177,27 @@ export class CanvasAdapter {
   touchToLogic(touch, event) {
     let x, y
 
-    // #ifdef H5
-    const rect = event.currentTarget.getBoundingClientRect
-      ? event.currentTarget.getBoundingClientRect()
-      : { left: 0, top: 0, width: this.cssWidth, height: this.cssHeight }
+    // 使用运行时检测而非条件编译（.js文件中条件编译可能不生效）
+    const isH5 = typeof window !== 'undefined' && typeof document !== 'undefined'
 
-    // 计算相对于 Canvas 的位置
-    x = touch.clientX - rect.left
-    y = touch.clientY - rect.top
+    if (isH5) {
+      // H5 环境
+      const rect = event.currentTarget.getBoundingClientRect
+        ? event.currentTarget.getBoundingClientRect()
+        : { left: 0, top: 0, width: this.cssWidth, height: this.cssHeight }
 
-    // 转换为逻辑坐标（考虑 CSS 尺寸与逻辑尺寸的比例）
-    x = x * (this.logicWidth / rect.width)
-    y = y * (this.logicHeight / rect.height)
-    // #endif
+      // 计算相对于 Canvas 的位置
+      x = touch.clientX - rect.left
+      y = touch.clientY - rect.top
 
-    // #ifndef H5
-    // 小程序中 touch.x/y 是相对于组件的坐标
-    x = touch.x * this.scaleX
-    y = touch.y * this.scaleY
-    // #endif
+      // 转换为逻辑坐标（考虑 CSS 尺寸与逻辑尺寸的比例）
+      x = x * (this.logicWidth / rect.width)
+      y = y * (this.logicHeight / rect.height)
+    } else {
+      // 小程序环境 - touch.x/y 是相对于组件的坐标
+      x = touch.x * this.scaleX
+      y = touch.y * this.scaleY
+    }
 
     return { x, y }
   }

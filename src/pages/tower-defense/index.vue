@@ -318,6 +318,19 @@ export default {
     },
 
     async startGame() {
+      // 先计算画布尺寸，再切换屏幕，避免使用默认尺寸渲染
+      const sysInfo = uni.getSystemInfoSync()
+      const screenWidth = sysInfo.windowWidth
+      const screenHeight = sysInfo.windowHeight
+      const headerHeight = 50
+      const tipHeight = 40
+      const towerBarHeight = 90
+      const safeBottom = sysInfo.safeAreaInsets?.bottom || 0
+
+      this.canvasWidth = screenWidth
+      this.canvasHeight = screenHeight - headerHeight - tipHeight - towerBarHeight - safeBottom - 20
+
+      // 现在切换到游戏屏幕，Canvas 会使用正确的尺寸渲染
       this.screen = 'game'
       await this.$nextTick()
       setTimeout(() => this.initGame(), 100)
@@ -325,19 +338,7 @@ export default {
 
     async initGame() {
       try {
-        // 计算画布尺寸
-        const sysInfo = uni.getSystemInfoSync()
-        const screenWidth = sysInfo.windowWidth
-        const screenHeight = sysInfo.windowHeight
-        const headerHeight = 50
-        const tipHeight = 40
-        const towerBarHeight = 90
-        const safeBottom = sysInfo.safeAreaInsets?.bottom || 0
-
-        this.canvasWidth = screenWidth
-        this.canvasHeight = screenHeight - headerHeight - tipHeight - towerBarHeight - safeBottom - 20
-
-        // 等待 DOM 更新，确保 Canvas 尺寸正确
+        // 等待 DOM 完全渲染
         await this.$nextTick()
         // 额外等待一帧，确保浏览器完成布局
         await new Promise(resolve => setTimeout(resolve, 50))
