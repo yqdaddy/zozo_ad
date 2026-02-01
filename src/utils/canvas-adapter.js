@@ -47,12 +47,14 @@ export class CanvasAdapter {
       height = 0
     } = options
 
-    // 1. 获取 DPR - 在 H5 环境使用实际的 window.devicePixelRatio
-    // 避免 uni.getSystemInfoSync().pixelRatio 在浏览器 DevTools 模拟时返回模拟设备的 DPR
+    // 1. 获取 DPR
+    // H5 环境：uni-app Canvas 2D 已自动处理 DPR，设置为 1 避免双重缩放
+    // 小程序/App 环境：需要手动处理 DPR
     const isH5 = typeof window !== 'undefined' && typeof document !== 'undefined'
+    this.isH5 = isH5
     if (isH5) {
-      // H5 环境：使用浏览器的实际 DPR
-      this.dpr = window.devicePixelRatio || 1
+      // H5 环境：不进行 DPR 缩放，uni-app 已处理
+      this.dpr = 1
     } else {
       // 小程序/App 环境：使用 uni API
       const sysInfo = uni.getSystemInfoSync()
