@@ -149,12 +149,18 @@ export class CanvasAdapter {
               this.canvas = res[0].node
               this.ctx = this.canvas.getContext('2d')
 
-              // 设置物理像素尺寸
-              this.canvas.width = this.physicalWidth
-              this.canvas.height = this.physicalHeight
-
-              // 应用 DPR 缩放
-              this.ctx.scale(this.dpr, this.dpr)
+              if (this.isH5) {
+                // H5 环境：使用 CSS 尺寸作为 canvas 物理尺寸
+                // 不进行 DPR 缩放，让浏览器/uni-app 自己处理
+                this.canvas.width = this.cssWidth
+                this.canvas.height = this.cssHeight
+                // 不调用 ctx.scale，保持 1:1
+              } else {
+                // 小程序/App 环境：需要手动处理 DPR
+                this.canvas.width = this.physicalWidth
+                this.canvas.height = this.physicalHeight
+                this.ctx.scale(this.dpr, this.dpr)
+              }
 
               resolve()
             } else if (retries < maxRetries) {
@@ -241,9 +247,16 @@ export class CanvasAdapter {
     this.physicalWidth = Math.floor(this.cssWidth * this.dpr)
     this.physicalHeight = Math.floor(this.cssHeight * this.dpr)
 
-    this.canvas.width = this.physicalWidth
-    this.canvas.height = this.physicalHeight
-    this.ctx.scale(this.dpr, this.dpr)
+    if (this.isH5) {
+      // H5 环境：使用 CSS 尺寸
+      this.canvas.width = this.cssWidth
+      this.canvas.height = this.cssHeight
+    } else {
+      // 小程序/App 环境：使用物理像素尺寸
+      this.canvas.width = this.physicalWidth
+      this.canvas.height = this.physicalHeight
+      this.ctx.scale(this.dpr, this.dpr)
+    }
 
     this._updateScale()
     return true
