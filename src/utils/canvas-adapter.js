@@ -169,10 +169,12 @@ export class CanvasAdapter {
               this.canvas = res[0].node
               this.ctx = this.canvas.getContext('2d')
 
-              // H5 和小程序都需要处理 DPR
               // 设置 Canvas 物理尺寸 = CSS尺寸 × DPR
               this.canvas.width = this.physicalWidth
               this.canvas.height = this.physicalHeight
+
+              // 重置变换矩阵（清除 uni-app 可能已设置的变换）
+              this.ctx.setTransform(1, 0, 0, 1, 0, 0)
               // 缩放绘图上下文，使绘图命令使用逻辑坐标
               this.ctx.scale(this.dpr, this.dpr)
 
@@ -264,6 +266,8 @@ export class CanvasAdapter {
     // H5 和小程序都使用物理像素尺寸
     this.canvas.width = this.physicalWidth
     this.canvas.height = this.physicalHeight
+    // 重置变换矩阵并重新缩放
+    this.ctx.setTransform(1, 0, 0, 1, 0, 0)
     this.ctx.scale(this.dpr, this.dpr)
 
     this._updateScale()
