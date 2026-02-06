@@ -171,7 +171,6 @@ export class CanvasAdapter {
 
               if (this.isH5) {
                 // H5 环境：尝试获取真正的 canvas DOM 元素
-                // uni-app 可能将 canvas 包装在容器中
                 let realCanvas = this.canvas
 
                 // 如果 this.canvas 不是真正的 HTMLCanvasElement，尝试从 DOM 获取
@@ -192,14 +191,23 @@ export class CanvasAdapter {
                 realCanvas.style.width = this.cssWidth + 'px'
                 realCanvas.style.height = this.cssHeight + 'px'
 
-                // 重置变换并应用 DPR 缩放
+                // 重置变换矩阵
                 this.ctx.setTransform(1, 0, 0, 1, 0, 0)
-                this.ctx.scale(this.dpr, this.dpr)
+
+                // 检查 uni-app 是否已经内部处理了 DPR
+                // 通过检查当前变换矩阵来判断
+                const transform = this.ctx.getTransform ? this.ctx.getTransform() : null
+                console.log('H5 Canvas 当前变换矩阵:', transform)
+
+                // 不调用 ctx.scale()，测试 uni-app 是否已经处理了 DPR
+                // 如果 uni-app 已经处理，不需要再 scale
+                // 如果没有处理，内容会变小（需要改回来）
+                // this.ctx.scale(this.dpr, this.dpr)
 
                 console.log('H5 Canvas 设置完成:')
                 console.log('  物理尺寸:', realCanvas.width, 'x', realCanvas.height)
                 console.log('  CSS尺寸:', realCanvas.style.width, realCanvas.style.height)
-                console.log('  DPR缩放:', this.dpr)
+                console.log('  DPR:', this.dpr, '(未应用 scale，测试 uni-app 内部是否处理)')
               } else {
                 // 小程序环境：需要手动处理 DPR
                 this.canvas.width = this.physicalWidth
@@ -300,7 +308,7 @@ export class CanvasAdapter {
       this.canvas.style.width = this.cssWidth + 'px'
       this.canvas.style.height = this.cssHeight + 'px'
       this.ctx.setTransform(1, 0, 0, 1, 0, 0)
-      this.ctx.scale(this.dpr, this.dpr)
+      // 不调用 scale，测试 uni-app 内部处理
     } else {
       // 小程序环境：需要手动处理 DPR
       this.canvas.width = this.physicalWidth
