@@ -48,13 +48,12 @@ export class CanvasAdapter {
     } = options
 
     // 1. 获取 DPR
-    // H5 环境：uni-app Canvas 2D 已自动处理 DPR，设置为 1 避免双重缩放
-    // 小程序/App 环境：需要手动处理 DPR
+    // H5 和小程序都需要处理 DPR，确保高分辨率屏幕显示清晰
     const isH5 = typeof window !== 'undefined' && typeof document !== 'undefined'
     this.isH5 = isH5
     if (isH5) {
-      // H5 环境：不进行 DPR 缩放，uni-app 已处理
-      this.dpr = 1
+      // H5 环境：使用浏览器的实际 DPR
+      this.dpr = window.devicePixelRatio || 1
     } else {
       // 小程序/App 环境：使用 uni API
       const sysInfo = uni.getSystemInfoSync()
@@ -170,18 +169,12 @@ export class CanvasAdapter {
               this.canvas = res[0].node
               this.ctx = this.canvas.getContext('2d')
 
-              if (this.isH5) {
-                // H5 环境：使用 CSS 尺寸作为 canvas 物理尺寸
-                // 不进行 DPR 缩放，让浏览器/uni-app 自己处理
-                this.canvas.width = this.cssWidth
-                this.canvas.height = this.cssHeight
-                // 不调用 ctx.scale，保持 1:1
-              } else {
-                // 小程序/App 环境：需要手动处理 DPR
-                this.canvas.width = this.physicalWidth
-                this.canvas.height = this.physicalHeight
-                this.ctx.scale(this.dpr, this.dpr)
-              }
+              // H5 和小程序都需要处理 DPR
+              // 设置 Canvas 物理尺寸 = CSS尺寸 × DPR
+              this.canvas.width = this.physicalWidth
+              this.canvas.height = this.physicalHeight
+              // 缩放绘图上下文，使绘图命令使用逻辑坐标
+              this.ctx.scale(this.dpr, this.dpr)
 
               resolve()
             } else if (retries < maxRetries) {
@@ -268,16 +261,10 @@ export class CanvasAdapter {
     this.physicalWidth = Math.floor(this.cssWidth * this.dpr)
     this.physicalHeight = Math.floor(this.cssHeight * this.dpr)
 
-    if (this.isH5) {
-      // H5 环境：使用 CSS 尺寸
-      this.canvas.width = this.cssWidth
-      this.canvas.height = this.cssHeight
-    } else {
-      // 小程序/App 环境：使用物理像素尺寸
-      this.canvas.width = this.physicalWidth
-      this.canvas.height = this.physicalHeight
-      this.ctx.scale(this.dpr, this.dpr)
-    }
+    // H5 和小程序都使用物理像素尺寸
+    this.canvas.width = this.physicalWidth
+    this.canvas.height = this.physicalHeight
+    this.ctx.scale(this.dpr, this.dpr)
 
     this._updateScale()
     return true
