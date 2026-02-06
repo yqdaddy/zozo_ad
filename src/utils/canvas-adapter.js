@@ -250,12 +250,15 @@ export class CanvasAdapter {
       x = touch.clientX - rect.left
       y = touch.clientY - rect.top
 
-      // uni-app Canvas 2D 在 H5 环境下内部处理了 DPR 缩放
-      // 绘图命令使用逻辑坐标（0-390），被自动缩放到物理尺寸
-      // 所以触摸坐标也应该使用逻辑坐标，不需要乘以 DPR
-      // x 和 y 已经是正确的逻辑坐标
-
-      console.log('touchToLogic:', { cssX: x, cssY: y, logicWidth: this.logicWidth, logicHeight: this.logicHeight })
+      // 详细调试日志
+      console.log('=== touchToLogic 详细调试 ===')
+      console.log('touch.clientX:', touch.clientX, 'touch.clientY:', touch.clientY)
+      console.log('rect:', { left: rect.left, top: rect.top, width: rect.width, height: rect.height })
+      console.log('CSS坐标 x:', x, 'y:', y)
+      console.log('Canvas物理尺寸:', this.canvas.width, 'x', this.canvas.height)
+      console.log('CSS尺寸:', this.cssWidth, 'x', this.cssHeight)
+      console.log('DPR:', this.dpr)
+      console.log('=============================')
     } else {
       // 小程序环境 - touch.x/y 是相对于组件的坐标
       x = touch.x * this.scaleX
