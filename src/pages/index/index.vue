@@ -59,7 +59,7 @@ export default {
           description: '用数学知识守护基地，答题建塔！',
           tags: ['五年级', '小数运算', '方程', '面积'],
           path: '/pages/tower-defense/index',
-          comingSoon: true
+          comingSoon: false
         },
         {
           id: 'math-runner',
