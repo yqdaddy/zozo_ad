@@ -256,13 +256,27 @@ export class CanvasAdapter {
         ? event.currentTarget.getBoundingClientRect()
         : { left: 0, top: 0, width: this.cssWidth, height: this.cssHeight }
 
-      // 计算相对于 Canvas 的位置
+      // 计算相对于 Canvas 的位置（CSS 像素）
       x = touch.clientX - rect.left
       y = touch.clientY - rect.top
 
-      // 转换为逻辑坐标（考虑 CSS 尺寸与逻辑尺寸的比例）
-      x = x * (this.logicWidth / rect.width)
-      y = y * (this.logicHeight / rect.height)
+      // 由于没有调用 ctx.scale()，绘图直接使用逻辑坐标
+      // 但 canvas 物理尺寸是 CSS 尺寸 × DPR，所以需要将触摸坐标也乘以 DPR
+      // 这样触摸坐标和绘图坐标就能匹配
+      x = x * this.dpr
+      y = y * this.dpr
+
+      console.log('touchToLogic:', {
+        touchX: touch.clientX,
+        touchY: touch.clientY,
+        rectLeft: rect.left,
+        rectTop: rect.top,
+        relativeX: touch.clientX - rect.left,
+        relativeY: touch.clientY - rect.top,
+        dpr: this.dpr,
+        finalX: x,
+        finalY: y
+      })
     } else {
       // 小程序环境 - touch.x/y 是相对于组件的坐标
       x = touch.x * this.scaleX
