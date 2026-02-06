@@ -99,9 +99,11 @@
           <input
             v-else
             v-model="userAnswer"
-            type="digit"
+            type="text"
+            inputmode="decimal"
             class="answer-input"
             placeholder="输入答案"
+            :adjust-position="false"
             @confirm="submitAnswer"
           />
         </view>

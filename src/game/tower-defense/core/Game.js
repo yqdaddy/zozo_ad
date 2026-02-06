@@ -242,13 +242,18 @@ export class Game {
     const gridX = Math.floor(x / gridSize)
     const gridY = Math.floor(y / gridSize)
 
+    // 调试日志
+    console.log('点击坐标:', x, y, '-> 网格:', gridX, gridY)
+    console.log('是否在路径上:', this.pathSystem.isOnPath(gridX, gridY))
+
     // 边界检查
     if (gridY < 0 || gridY >= this.config.rows ||
         gridX < 0 || gridX >= this.config.cols) {
+      console.log('点击超出边界')
       return
     }
 
-    // 检查是否在路径上
+    // 检查是否在路径上 - 路径上不能建塔
     if (this.pathSystem.isOnPath(gridX, gridY)) {
       this.events.emit('showToast', { title: '不能在路径上建塔', icon: 'none' })
       return

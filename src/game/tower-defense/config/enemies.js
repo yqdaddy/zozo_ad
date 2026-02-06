@@ -38,36 +38,60 @@ export const ENEMY_CONFIGS = {
 
 /**
  * 获取波次敌人配置
+ * 难度曲线：初期简单，后期困难
  * @param {Number} wave - 波次数
  */
 export function getWaveEnemies(wave) {
   const enemies = []
-  const baseCount = 3 + Math.floor(wave * 1.2)
 
-  // 基础怪
-  for (let i = 0; i < baseCount; i++) {
-    enemies.push('basic')
+  // 波次 1-3：入门阶段，只有少量基础怪
+  if (wave <= 3) {
+    const count = wave + 1  // 2, 3, 4 个
+    for (let i = 0; i < count; i++) {
+      enemies.push('basic')
+    }
+    return enemies
   }
 
-  // 第 2 波起加入快速怪
-  if (wave >= 2) {
+  // 波次 4-6：初级阶段，基础怪 + 少量快速怪
+  if (wave <= 6) {
+    const basicCount = 3 + wave
+    const fastCount = wave - 3
+    for (let i = 0; i < basicCount; i++) enemies.push('basic')
+    for (let i = 0; i < fastCount; i++) enemies.push('fast')
+    return enemies
+  }
+
+  // 波次 7-10：中级阶段，加入坦克怪
+  if (wave <= 10) {
+    const basicCount = 4 + wave
     const fastCount = Math.floor(wave / 2)
-    for (let i = 0; i < fastCount; i++) {
-      enemies.push('fast')
-    }
+    const tankCount = wave - 6
+    for (let i = 0; i < basicCount; i++) enemies.push('basic')
+    for (let i = 0; i < fastCount; i++) enemies.push('fast')
+    for (let i = 0; i < tankCount; i++) enemies.push('tank')
+    // 第 10 波出现第一个 Boss
+    if (wave === 10) enemies.push('boss')
+    return enemies
   }
 
-  // 第 4 波起加入坦克怪
-  if (wave >= 4) {
-    const tankCount = Math.floor(wave / 3)
-    for (let i = 0; i < tankCount; i++) {
-      enemies.push('tank')
-    }
-  }
+  // 波次 11+：困难阶段，大量敌人 + 更频繁的 Boss
+  const basicCount = 8 + Math.floor(wave * 0.8)
+  const fastCount = 3 + Math.floor(wave / 2)
+  const tankCount = 2 + Math.floor(wave / 3)
 
-  // 每 5 波出现 Boss
-  if (wave % 5 === 0) {
+  for (let i = 0; i < basicCount; i++) enemies.push('basic')
+  for (let i = 0; i < fastCount; i++) enemies.push('fast')
+  for (let i = 0; i < tankCount; i++) enemies.push('tank')
+
+  // 每 5 波出现 Boss，15 波后每 4 波出现
+  const bossInterval = wave >= 15 ? 4 : 5
+  if (wave % bossInterval === 0) {
     enemies.push('boss')
+    // 20 波后可能出现双 Boss
+    if (wave >= 20 && wave % 10 === 0) {
+      enemies.push('boss')
+    }
   }
 
   return enemies
@@ -75,17 +99,37 @@ export function getWaveEnemies(wave) {
 
 /**
  * 获取敌人属性（考虑波次加成）
+ * 难度曲线：初期加成小，后期加成大
  * @param {String} type - 敌人类型
  * @param {Number} wave - 当前波次
  */
 export function getEnemyStats(type, wave) {
   const base = ENEMY_CONFIGS[type]
-  const waveMultiplier = 1 + (wave - 1) * 0.15
+
+  // 分阶段的生命值加成
+  let healthMultiplier
+  if (wave <= 3) {
+    // 入门阶段：几乎无加成
+    healthMultiplier = 1 + (wave - 1) * 0.05
+  } else if (wave <= 6) {
+    // 初级阶段：轻微加成
+    healthMultiplier = 1.1 + (wave - 3) * 0.1
+  } else if (wave <= 10) {
+    // 中级阶段：适中加成
+    healthMultiplier = 1.4 + (wave - 6) * 0.15
+  } else {
+    // 困难阶段：显著加成
+    healthMultiplier = 2 + (wave - 10) * 0.2
+  }
+
+  // 速度在后期略微提升（最多增加 30%）
+  const speedMultiplier = wave > 10 ? Math.min(1.3, 1 + (wave - 10) * 0.03) : 1
 
   return {
     ...base,
-    health: Math.floor(base.health * waveMultiplier),
-    maxHealth: Math.floor(base.health * waveMultiplier)
+    health: Math.floor(base.health * healthMultiplier),
+    maxHealth: Math.floor(base.health * healthMultiplier),
+    speed: base.speed * speedMultiplier
   }
 }
 
