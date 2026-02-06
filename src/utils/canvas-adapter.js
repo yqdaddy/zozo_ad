@@ -169,14 +169,20 @@ export class CanvasAdapter {
               this.canvas = res[0].node
               this.ctx = this.canvas.getContext('2d')
 
-              // 设置 Canvas 物理尺寸 = CSS尺寸 × DPR
-              this.canvas.width = this.physicalWidth
-              this.canvas.height = this.physicalHeight
-
-              // 重置变换矩阵（清除 uni-app 可能已设置的变换）
-              this.ctx.setTransform(1, 0, 0, 1, 0, 0)
-              // 缩放绘图上下文，使绘图命令使用逻辑坐标
-              this.ctx.scale(this.dpr, this.dpr)
+              if (this.isH5) {
+                // H5 环境：不手动处理 DPR，让 uni-app/浏览器自己管理
+                // 直接使用 CSS 尺寸作为 canvas 内部尺寸
+                this.canvas.width = this.cssWidth
+                this.canvas.height = this.cssHeight
+                // 重置变换矩阵，不进行缩放
+                this.ctx.setTransform(1, 0, 0, 1, 0, 0)
+              } else {
+                // 小程序环境：需要手动处理 DPR
+                this.canvas.width = this.physicalWidth
+                this.canvas.height = this.physicalHeight
+                this.ctx.setTransform(1, 0, 0, 1, 0, 0)
+                this.ctx.scale(this.dpr, this.dpr)
+              }
 
               resolve()
             } else if (retries < maxRetries) {
@@ -263,12 +269,18 @@ export class CanvasAdapter {
     this.physicalWidth = Math.floor(this.cssWidth * this.dpr)
     this.physicalHeight = Math.floor(this.cssHeight * this.dpr)
 
-    // H5 和小程序都使用物理像素尺寸
-    this.canvas.width = this.physicalWidth
-    this.canvas.height = this.physicalHeight
-    // 重置变换矩阵并重新缩放
-    this.ctx.setTransform(1, 0, 0, 1, 0, 0)
-    this.ctx.scale(this.dpr, this.dpr)
+    if (this.isH5) {
+      // H5 环境：不手动处理 DPR
+      this.canvas.width = this.cssWidth
+      this.canvas.height = this.cssHeight
+      this.ctx.setTransform(1, 0, 0, 1, 0, 0)
+    } else {
+      // 小程序环境：需要手动处理 DPR
+      this.canvas.width = this.physicalWidth
+      this.canvas.height = this.physicalHeight
+      this.ctx.setTransform(1, 0, 0, 1, 0, 0)
+      this.ctx.scale(this.dpr, this.dpr)
+    }
 
     this._updateScale()
     return true
