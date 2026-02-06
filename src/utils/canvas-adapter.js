@@ -170,12 +170,36 @@ export class CanvasAdapter {
               this.ctx = this.canvas.getContext('2d')
 
               if (this.isH5) {
-                // H5 环境：不手动处理 DPR，让 uni-app/浏览器自己管理
-                // 直接使用 CSS 尺寸作为 canvas 内部尺寸
-                this.canvas.width = this.cssWidth
-                this.canvas.height = this.cssHeight
-                // 重置变换矩阵，不进行缩放
+                // H5 环境：尝试获取真正的 canvas DOM 元素
+                // uni-app 可能将 canvas 包装在容器中
+                let realCanvas = this.canvas
+
+                // 如果 this.canvas 不是真正的 HTMLCanvasElement，尝试从 DOM 获取
+                if (typeof HTMLCanvasElement !== 'undefined' && !(this.canvas instanceof HTMLCanvasElement)) {
+                  const domCanvas = document.querySelector(`#${canvasId} canvas`) || document.querySelector(`#${canvasId}`)
+                  if (domCanvas && domCanvas.tagName === 'CANVAS') {
+                    realCanvas = domCanvas
+                    this.canvas = realCanvas
+                    this.ctx = realCanvas.getContext('2d')
+                  }
+                }
+
+                // 设置 canvas 物理尺寸 = CSS尺寸 × DPR（确保高清显示）
+                realCanvas.width = this.physicalWidth
+                realCanvas.height = this.physicalHeight
+
+                // 设置 CSS 尺寸（确保显示尺寸正确）
+                realCanvas.style.width = this.cssWidth + 'px'
+                realCanvas.style.height = this.cssHeight + 'px'
+
+                // 重置变换并应用 DPR 缩放
                 this.ctx.setTransform(1, 0, 0, 1, 0, 0)
+                this.ctx.scale(this.dpr, this.dpr)
+
+                console.log('H5 Canvas 设置完成:')
+                console.log('  物理尺寸:', realCanvas.width, 'x', realCanvas.height)
+                console.log('  CSS尺寸:', realCanvas.style.width, realCanvas.style.height)
+                console.log('  DPR缩放:', this.dpr)
               } else {
                 // 小程序环境：需要手动处理 DPR
                 this.canvas.width = this.physicalWidth
@@ -270,10 +294,13 @@ export class CanvasAdapter {
     this.physicalHeight = Math.floor(this.cssHeight * this.dpr)
 
     if (this.isH5) {
-      // H5 环境：不手动处理 DPR
-      this.canvas.width = this.cssWidth
-      this.canvas.height = this.cssHeight
+      // H5 环境：设置物理尺寸和 CSS 尺寸
+      this.canvas.width = this.physicalWidth
+      this.canvas.height = this.physicalHeight
+      this.canvas.style.width = this.cssWidth + 'px'
+      this.canvas.style.height = this.cssHeight + 'px'
       this.ctx.setTransform(1, 0, 0, 1, 0, 0)
+      this.ctx.scale(this.dpr, this.dpr)
     } else {
       // 小程序环境：需要手动处理 DPR
       this.canvas.width = this.physicalWidth
