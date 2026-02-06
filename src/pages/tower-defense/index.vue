@@ -296,7 +296,10 @@ export default {
         starDetails: [],
         newAchievements: [],
         encouragement: ''
-      }
+      },
+
+      // 随机出题定时器
+      randomQuestionTimer: null
     }
   },
 
@@ -364,6 +367,9 @@ export default {
         // 初始化并启动工具
         this.game.init()
         this.game.start()
+
+        // 启动随机出题定时器
+        this.startRandomQuestionTimer()
       } catch (error) {
         console.error('Game init failed:', error)
         setTimeout(() => this.initGame(), 200)
@@ -495,7 +501,48 @@ export default {
       this.showMathModal = false
       if (this.game) {
         this.game.resume()
+        // 重新启动随机出题定时器
+        this.startRandomQuestionTimer()
       }
+    },
+
+    // 启动随机出题定时器（10-20秒随机间隔）
+    startRandomQuestionTimer() {
+      this.stopRandomQuestionTimer()
+      const delay = 10000 + Math.random() * 10000 // 10-20秒
+      this.randomQuestionTimer = setTimeout(() => {
+        this.triggerRandomQuestion()
+      }, delay)
+    },
+
+    // 停止随机出题定时器
+    stopRandomQuestionTimer() {
+      if (this.randomQuestionTimer) {
+        clearTimeout(this.randomQuestionTimer)
+        this.randomQuestionTimer = null
+      }
+    },
+
+    // 触发随机数学题
+    triggerRandomQuestion() {
+      // 如果游戏不在运行状态，不出题
+      if (!this.game || this.gameState.isPaused || this.gameState.isGameOver) {
+        return
+      }
+      // 如果当前已有弹窗，不重复出题
+      if (this.showMathModal || this.showPauseModal || this.showGameOverModal) {
+        this.startRandomQuestionTimer()
+        return
+      }
+
+      // 显示随机数学题，回答后给予金币奖励
+      this.showMathQuestion(2, (isCorrect) => {
+        if (isCorrect) {
+          // 答对奖励金币
+          this.game.addGold(15)
+          uni.showToast({ title: '+15 金币！', icon: 'none', duration: 1000 })
+        }
+      })
     },
 
     pauseGame() {
@@ -522,6 +569,7 @@ export default {
     restartGame() {
       this.showPauseModal = false
       this.showGameOverModal = false
+      this.stopRandomQuestionTimer()
       if (this.game) {
         this.game.destroy()
       }
@@ -533,6 +581,7 @@ export default {
     quitGame() {
       this.showPauseModal = false
       this.showGameOverModal = false
+      this.stopRandomQuestionTimer()
       if (this.game) {
         this.game.destroy()
         this.game = null
@@ -567,6 +616,7 @@ export default {
   },
 
   onUnload() {
+    this.stopRandomQuestionTimer()
     if (this.game) {
       this.game.destroy()
       this.game = null

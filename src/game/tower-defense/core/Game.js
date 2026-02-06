@@ -416,6 +416,14 @@ export class Game {
   }
 
   /**
+   * 增加金币
+   */
+  addGold(amount) {
+    this.state.gold += amount
+    this.events.emit('stateChange', this.state)
+  }
+
+  /**
    * 开始波次
    */
   startWave() {
