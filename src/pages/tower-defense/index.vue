@@ -311,7 +311,9 @@ export default {
 
   methods: {
     goBack() {
-      uni.navigateBack()
+      uni.reLaunch({
+        url: '/pages/index/index'
+      })
     },
 
     getTowerName(type) {
