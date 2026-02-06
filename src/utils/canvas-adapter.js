@@ -94,6 +94,27 @@ export class CanvasAdapter {
 
     this.initialized = true
 
+    // 调试日志 - 帮助排查渲染问题
+    console.log('=== CanvasAdapter 初始化完成 ===')
+    console.log('环境:', this.isH5 ? 'H5' : '小程序/App')
+    console.log('DPR:', this.dpr)
+    console.log('传入尺寸: width=' + width + ', height=' + height)
+    console.log('CSS尺寸: ' + this.cssWidth + ' x ' + this.cssHeight)
+    console.log('逻辑尺寸: ' + this.logicWidth + ' x ' + this.logicHeight)
+    console.log('物理尺寸: ' + this.physicalWidth + ' x ' + this.physicalHeight)
+    console.log('Canvas实际尺寸: ' + this.canvas.width + ' x ' + this.canvas.height)
+    console.log('scaleX=' + this.scaleX + ', scaleY=' + this.scaleY)
+    if (this.isH5) {
+      console.log('window.devicePixelRatio:', window.devicePixelRatio)
+      const canvasEl = document.querySelector('#gameCanvas canvas') || document.querySelector('#gameCanvas')
+      if (canvasEl) {
+        const rect = canvasEl.getBoundingClientRect()
+        console.log('Canvas DOM rect:', rect.width + ' x ' + rect.height)
+        console.log('Canvas CSS style:', canvasEl.style.width, canvasEl.style.height)
+      }
+    }
+    console.log('================================')
+
     return {
       ctx: this.ctx,
       width: this.logicWidth,

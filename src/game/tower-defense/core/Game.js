@@ -75,6 +75,17 @@ export class Game {
     this.config.gridSize = Math.floor(this.canvasAdapter.logicWidth / this.config.cols)
     this.config.rows = Math.floor(this.canvasAdapter.logicHeight / this.config.gridSize)
 
+    // 调试日志
+    console.log('=== Game 初始化 ===')
+    console.log('canvasAdapter.logicWidth:', this.canvasAdapter.logicWidth)
+    console.log('canvasAdapter.logicHeight:', this.canvasAdapter.logicHeight)
+    console.log('cols:', this.config.cols)
+    console.log('rows:', this.config.rows)
+    console.log('gridSize:', this.config.gridSize)
+    console.log('网格总宽度:', this.config.cols * this.config.gridSize)
+    console.log('网格总高度:', this.config.rows * this.config.gridSize)
+    console.log('===================')
+
     // 生成路径
     this.pathSystem.generate()
 
