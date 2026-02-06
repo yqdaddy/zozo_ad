@@ -191,14 +191,13 @@ export class CanvasAdapter {
                 realCanvas.style.width = this.cssWidth + 'px'
                 realCanvas.style.height = this.cssHeight + 'px'
 
-                // 重置变换矩阵并应用 DPR 缩放
-                // 这样绘图使用逻辑坐标（0-390），自动缩放到物理尺寸（0-1170）
-                this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0)
+                // 重置变换矩阵（不应用 DPR 缩放，uni-app 内部已处理）
+                this.ctx.setTransform(1, 0, 0, 1, 0, 0)
 
                 console.log('H5 Canvas 设置完成:')
                 console.log('  物理尺寸:', realCanvas.width, 'x', realCanvas.height)
                 console.log('  CSS尺寸:', realCanvas.style.width, realCanvas.style.height)
-                console.log('  DPR缩放:', this.dpr)
+                console.log('  DPR:', this.dpr, '(未应用 scale)')
               } else {
                 // 小程序环境：需要手动处理 DPR
                 this.canvas.width = this.physicalWidth
@@ -301,8 +300,8 @@ export class CanvasAdapter {
       this.canvas.height = this.physicalHeight
       this.canvas.style.width = this.cssWidth + 'px'
       this.canvas.style.height = this.cssHeight + 'px'
-      // 使用 setTransform 设置 DPR 缩放
-      this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0)
+      // 重置变换矩阵（不应用 DPR 缩放）
+      this.ctx.setTransform(1, 0, 0, 1, 0, 0)
     } else {
       // 小程序环境：需要手动处理 DPR
       this.canvas.width = this.physicalWidth
