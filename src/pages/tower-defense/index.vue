@@ -4,17 +4,20 @@
     <view v-if="screen === 'menu'" class="screen menu-screen">
       <view class="menu-content">
         <text class="title">🏰 数学塔防</text>
-        <text class="subtitle">五年级上册</text>
+        <text class="subtitle">五年级 + 初一</text>
         <view class="menu-buttons">
           <button class="btn btn-primary" @click="startGame">开始工具</button>
           <button class="btn btn-secondary" @click="showHelp = true">工具说明</button>
           <button class="btn btn-secondary" @click="goBack">返回首页</button>
         </view>
         <view class="knowledge-tags">
-          <text class="tag">小数乘法</text>
-          <text class="tag">小数除法</text>
+          <text class="tag">小数运算</text>
           <text class="tag">简易方程</text>
           <text class="tag">多边形面积</text>
+          <text class="tag">有理数</text>
+          <text class="tag">整式</text>
+          <text class="tag">一元一次方程</text>
+          <text class="tag">几何初步</text>
         </view>
       </view>
     </view>

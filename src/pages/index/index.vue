@@ -57,7 +57,7 @@ export default {
           icon: '🏰',
           title: '数学塔防',
           description: '用数学知识守护基地，答题建塔！',
-          tags: ['五年级', '小数运算', '方程', '面积'],
+          tags: ['五年级', '初一', '有理数', '方程'],
           path: '/pages/tower-defense/index',
           comingSoon: false
         },
