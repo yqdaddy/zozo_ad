@@ -6,54 +6,66 @@ export const ENEMY_CONFIGS = {
     name: '小怪',
     emoji: '👾',
     health: 40,
-    speed: 0.8,
+    speed: 1.2,
     gold: 10,
     attack: 1,
+    attackRange: 30,
+    attackCooldown: 2000,
     color: '#4CAF50'
   },
   fast: {
     name: '快速怪',
     emoji: '💨',
     health: 25,
-    speed: 1.5,
+    speed: 2.2,
     gold: 15,
     attack: 1,
+    attackRange: 25,
+    attackCooldown: 1500,
     color: '#03A9F4'
   },
   tank: {
     name: '坦克怪',
     emoji: '🛡️',
     health: 100,
-    speed: 0.4,
+    speed: 0.7,
     gold: 25,
     attack: 2,
+    attackRange: 35,
+    attackCooldown: 2500,
     color: '#795548'
   },
   zombie: {
     name: '僵尸',
     emoji: '🧟',
     health: 60,
-    speed: 0.5,
+    speed: 0.9,
     gold: 20,
     attack: 2,
+    attackRange: 40,
+    attackCooldown: 1800,
     color: '#8BC34A'
   },
   zombieBoss: {
     name: '僵尸大Boss',
     emoji: '🧟‍♂️',
     health: 500,
-    speed: 0.25,
+    speed: 0.5,
     gold: 150,
     attack: 5,
+    attackRange: 50,
+    attackCooldown: 1500,
     color: '#556B2F'
   },
   boss: {
     name: 'Boss',
     emoji: '👹',
     health: 300,
-    speed: 0.3,
+    speed: 0.6,
     gold: 100,
     attack: 3,
+    attackRange: 45,
+    attackCooldown: 2000,
     color: '#F44336'
   }
 }

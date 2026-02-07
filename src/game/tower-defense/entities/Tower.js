@@ -23,6 +23,10 @@ export class Tower extends Entity {
     // 基础配置
     this.baseConfig = { ...config }
 
+    // 生命值
+    this.health = config.health || 100
+    this.maxHealth = config.health || 100
+
     // 战斗属性
     this.damage = config.damage
     this.range = config.range
@@ -124,6 +128,18 @@ export class Tower extends Entity {
   }
 
   /**
+   * 受到伤害
+   */
+  takeDamage(damage) {
+    this.health -= damage
+    if (this.health <= 0) {
+      this.health = 0
+      this.isDead = true
+      this.game.events.emit('towerDestroyed', this)
+    }
+  }
+
+  /**
    * 渲染
    */
   render(ctx) {
@@ -169,6 +185,23 @@ export class Tower extends Entity {
       ctx.fillStyle = '#FFD700'
       ctx.font = 'bold 10px Arial'
       ctx.fillText(`Lv${this.level}`, this.x, this.y - size / 2 - 6)
+    }
+
+    // 血条（只在受伤时显示）
+    if (this.health < this.maxHealth) {
+      const hpWidth = size * 0.8
+      const hpHeight = 4
+      const hpX = this.x - hpWidth / 2
+      const hpY = this.y + size / 2 + 4
+
+      // 血条背景
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'
+      ctx.fillRect(hpX, hpY, hpWidth, hpHeight)
+
+      // 当前血量
+      const hpRatio = this.health / this.maxHealth
+      ctx.fillStyle = hpRatio > 0.5 ? '#4CAF50' : hpRatio > 0.25 ? '#FF9800' : '#F44336'
+      ctx.fillRect(hpX, hpY, hpWidth * hpRatio, hpHeight)
     }
   }
 }
