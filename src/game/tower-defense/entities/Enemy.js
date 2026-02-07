@@ -27,6 +27,9 @@ export class Enemy extends Entity {
     // 奖励
     this.gold = stats.gold
 
+    // 攻击力
+    this.attack = stats.attack || 1
+
     // 视觉
     this.emoji = stats.emoji
     this.color = stats.color
@@ -118,12 +121,14 @@ export class Enemy extends Entity {
    */
   reachEnd() {
     this.isDead = true
-    this.game.state.lives--
+    // 根据攻击力扣减生命值
+    this.game.state.lives -= this.attack
 
     // 触发事件
     this.game.events.emit('enemyReachedEnd', this)
 
     if (this.game.state.lives <= 0) {
+      this.game.state.lives = 0
       this.game.gameOver(false)
     }
   }

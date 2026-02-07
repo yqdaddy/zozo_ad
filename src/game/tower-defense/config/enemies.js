@@ -8,6 +8,7 @@ export const ENEMY_CONFIGS = {
     health: 40,
     speed: 0.8,
     gold: 10,
+    attack: 1,
     color: '#4CAF50'
   },
   fast: {
@@ -16,6 +17,7 @@ export const ENEMY_CONFIGS = {
     health: 25,
     speed: 1.5,
     gold: 15,
+    attack: 1,
     color: '#03A9F4'
   },
   tank: {
@@ -24,6 +26,7 @@ export const ENEMY_CONFIGS = {
     health: 100,
     speed: 0.4,
     gold: 25,
+    attack: 2,
     color: '#795548'
   },
   zombie: {
@@ -32,6 +35,7 @@ export const ENEMY_CONFIGS = {
     health: 60,
     speed: 0.5,
     gold: 20,
+    attack: 2,
     color: '#8BC34A'
   },
   zombieBoss: {
@@ -40,6 +44,7 @@ export const ENEMY_CONFIGS = {
     health: 500,
     speed: 0.25,
     gold: 150,
+    attack: 5,
     color: '#556B2F'
   },
   boss: {
@@ -48,6 +53,7 @@ export const ENEMY_CONFIGS = {
     health: 300,
     speed: 0.3,
     gold: 100,
+    attack: 3,
     color: '#F44336'
   }
 }
