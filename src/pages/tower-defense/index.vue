@@ -99,16 +99,18 @@
               <text>{{ option }}</text>
             </view>
           </view>
-          <input
-            v-else
-            v-model="userAnswer"
-            type="text"
-            inputmode="decimal"
-            class="answer-input"
-            placeholder="输入答案"
-            :adjust-position="false"
-            @confirm="submitAnswer"
-          />
+          <view v-else class="input-with-minus">
+            <button class="minus-btn" :class="{ active: isNegative }" @click="toggleNegative">−</button>
+            <input
+              v-model="userAnswer"
+              type="text"
+              inputmode="decimal"
+              class="answer-input"
+              placeholder="输入答案"
+              :adjust-position="false"
+              @confirm="submitAnswer"
+            />
+          </view>
         </view>
         <view class="modal-buttons">
           <button v-if="!showOptions" class="btn btn-primary" @click="submitAnswer">确定</button>
@@ -286,6 +288,7 @@ export default {
       feedbackClass: '',
       selectedOption: null,
       mathCallback: null,
+      isNegative: false,
 
       // 工具结果
       gameResult: {
@@ -447,6 +450,7 @@ export default {
       this.feedback = ''
       this.feedbackClass = ''
       this.selectedOption = null
+      this.isNegative = false
 
       if (Math.random() > 0.5 && difficulty <= 2) {
         this.showOptions = true
@@ -465,9 +469,15 @@ export default {
       this.checkMathAnswer(option.toString())
     },
 
+    toggleNegative() {
+      this.isNegative = !this.isNegative
+    },
+
     submitAnswer() {
       if (!this.userAnswer) return
-      this.checkMathAnswer(this.userAnswer)
+      // 组合负号和答案
+      const finalAnswer = this.isNegative ? '-' + this.userAnswer : this.userAnswer
+      this.checkMathAnswer(finalAnswer)
     },
 
     checkMathAnswer(answer) {
@@ -929,8 +939,34 @@ export default {
   margin-bottom: 16rpx;
 }
 
+.input-with-minus {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.minus-btn {
+  width: 80rpx;
+  height: 80rpx;
+  font-size: 48rpx;
+  font-weight: bold;
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.1);
+  border: 2rpx solid rgba(255, 255, 255, 0.3);
+  border-radius: 16rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.minus-btn.active {
+  background: #F44336;
+  border-color: #F44336;
+}
+
 .answer-input {
-  width: 100%;
+  flex: 1;
   padding: 24rpx;
   font-size: 36rpx;
   text-align: center;
