@@ -71,7 +71,12 @@ class StorageManager {
     const keysToDelete = [
       `user_${userId}_saves`,
       `user_${userId}_achievements`,
-      `user_${userId}_progress`
+      `user_${userId}_progress`,
+      `user_${userId}_signin`,
+      `user_${userId}_daily_challenge`,
+      `user_${userId}_subscribe_prompt_time`,
+      `user_${userId}_challenge_sent`,
+      `user_${userId}_challenge_received`
     ]
     keysToDelete.forEach(key => {
       try {

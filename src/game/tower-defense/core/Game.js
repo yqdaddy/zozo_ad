@@ -489,6 +489,23 @@ export class Game {
   }
 
   /**
+   * 开始游戏（带延迟）
+   */
+  startWithDelay() {
+    this.reset()
+    this.pathSystem.generate()
+
+    // 第一波敌人延迟5秒出现
+    setTimeout(() => {
+      if (!this.state.isGameOver) {
+        this.startWave()
+      }
+    }, 5000)
+
+    this.gameLoop.start()
+  }
+
+  /**
    * 生成敌人
    */
   spawnEnemies(enemyTypes, delay) {
@@ -549,7 +566,10 @@ export class Game {
       setTimeout(() => {
         if (!this.state.isGameOver) {
           this.events.emit('showToast', { title: `第 ${this.state.wave} 波来袭！`, icon: 'none' })
-          this.startWave()
+          // 下一波立即开始（只在第一波有5秒延迟）
+          const enemies = getWaveEnemies(this.state.wave)
+          const shuffled = shuffleArray(enemies)
+          this.spawnEnemies(shuffled, 800)
         }
       }, 2000)
     }
@@ -708,8 +728,12 @@ export class Game {
 
     this.events.emit('stateChange', this.state)
 
-    // 开始当前波次
-    this.startWave()
+    // 开始当前波次（立即开始，无延迟）
+    setTimeout(() => {
+      if (!this.state.isGameOver) {
+        this.startWave()
+      }
+    }, 100)
   }
 
   /**

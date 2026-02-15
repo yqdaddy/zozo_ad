@@ -13,6 +13,10 @@
         <text class="subtitle">五年级 + 初一</text>
         <view class="menu-buttons">
           <button class="btn btn-primary" @click="screen = 'levels'">选择关卡</button>
+          <button class="btn btn-primary daily-btn" @click="openDailyChallenge">
+            每日挑战
+            <text v-if="dailyChallengeStats && dailyChallengeStats.todayCompleted" class="daily-done-tag">已完成</text>
+          </button>
           <button v-if="saveSlots.some(slot => slot !== null)" class="btn btn-primary" @click="openLoadModal">继续游戏</button>
           <button class="btn btn-secondary" @click="showProfileModal = true">切换档案</button>
           <button class="btn btn-secondary" @click="showHelp = true">工具说明</button>
@@ -278,6 +282,9 @@
         <view class="modal-buttons">
           <button class="btn btn-primary" @click="restartGame">再来一局</button>
           <button class="btn btn-secondary" @click="shareResult">分享成绩</button>
+          <!-- #ifdef MP-WEIXIN -->
+          <button class="btn btn-secondary" open-type="share" @click="prepareChallenge">发起PK挑战</button>
+          <!-- #endif -->
           <button class="btn btn-secondary" @click="quitGame">返回菜单</button>
         </view>
       </view>
@@ -345,6 +352,126 @@
       </view>
     </view>
 
+    <!-- 签到弹窗 -->
+    <view v-if="showSigninModal" class="modal" @click.self="showSigninModal = false">
+      <view class="modal-content signin-modal">
+        <text class="modal-title">每日签到</text>
+        <!-- 签到结果提示 -->
+        <view v-if="signinResult" class="signin-result">
+          <text class="signin-result-text">{{ signinResult.reward.label }}</text>
+          <text class="signin-streak">连续签到 {{ signinResult.currentStreak }} 天</text>
+        </view>
+        <!-- 7天日历 -->
+        <view v-if="signinStatus" class="signin-calendar">
+          <view
+            v-for="(reward, index) in signinStatus.rewards"
+            :key="index"
+            class="signin-day"
+            :class="{
+              signed: index < signinStatus.cycleDay || (index === signinStatus.cycleDay && signinStatus.todaySigned),
+              today: !signinStatus.todaySigned && index === signinStatus.cycleDay
+            }"
+          >
+            <text class="signin-day-num">第{{ reward.day }}天</text>
+            <text class="signin-day-reward">{{ reward.label }}</text>
+            <text v-if="index < signinStatus.cycleDay || (index === signinStatus.cycleDay && signinStatus.todaySigned)" class="signin-check">✓</text>
+          </view>
+        </view>
+        <view class="modal-buttons">
+          <button
+            v-if="signinStatus && !signinStatus.todaySigned"
+            class="btn btn-primary"
+            @click="doSignin"
+          >签到领奖</button>
+          <button class="btn btn-secondary" @click="showSigninModal = false">关闭</button>
+        </view>
+      </view>
+    </view>
+
+    <!-- 每日挑战弹窗 -->
+    <view v-if="showDailyChallengeModal" class="modal">
+      <view class="modal-content daily-challenge-modal">
+        <!-- 未完成：答题界面 -->
+        <view v-if="!dailyChallengeFinished && dailyChallenge">
+          <text class="modal-title">每日挑战</text>
+          <view class="daily-progress">
+            <text class="daily-progress-text">第 {{ dailyChallengeIndex + 1 }} / {{ dailyChallenge.totalCount }} 题</text>
+            <view class="daily-progress-bar">
+              <view class="daily-progress-fill" :style="{ width: (dailyChallengeIndex / dailyChallenge.totalCount * 100) + '%' }"></view>
+            </view>
+          </view>
+          <view v-if="dailyChallenge.questions[dailyChallengeIndex]" class="math-question">
+            <text class="question-type">{{ dailyChallenge.questions[dailyChallengeIndex].type }}</text>
+            <text class="question-text">{{ dailyChallenge.questions[dailyChallengeIndex].question }}</text>
+          </view>
+          <view class="answer-options">
+            <view
+              v-for="(option, i) in (dailyChallenge.questions[dailyChallengeIndex] || {}).options || []"
+              :key="i"
+              class="option-btn"
+              :class="{
+                correct: dailyChallengeFeedback && option === dailyChallenge.questions[dailyChallengeIndex].answer,
+                wrong: dailyChallengeFeedback && dailyChallengeSelected === option && option !== dailyChallenge.questions[dailyChallengeIndex].answer
+              }"
+              @click="selectDailyChallengeOption(option)"
+            >
+              <text>{{ option }}</text>
+            </view>
+          </view>
+          <text v-if="dailyChallengeFeedback" class="feedback" :class="dailyChallengeFeedback === 'correct' ? 'correct' : 'wrong'">
+            {{ dailyChallengeFeedback === 'correct' ? '✓ 正确！' : '✗ 答案是 ' + dailyChallenge.questions[dailyChallengeIndex].answer }}
+          </text>
+        </view>
+
+        <!-- 已完成：结果界面 -->
+        <view v-if="dailyChallengeFinished && dailyChallengeResult">
+          <text class="modal-title">挑战完成！</text>
+          <view class="daily-result-stats">
+            <view class="stat-item">
+              <text class="stat-value">{{ dailyChallengeResult.correct }} / {{ dailyChallengeResult.total }}</text>
+              <text class="stat-label">正确数</text>
+            </view>
+            <view class="stat-item">
+              <text class="stat-value">{{ dailyChallengeResult.accuracy }}%</text>
+              <text class="stat-label">正确率</text>
+            </view>
+            <view class="stat-item">
+              <text class="stat-value">{{ dailyChallengeResult.timeStr }}</text>
+              <text class="stat-label">用时</text>
+            </view>
+          </view>
+          <view v-if="dailyChallengeStats" class="daily-streak-info">
+            <text class="daily-streak-text">连续挑战 {{ dailyChallengeStats.streak }} 天</text>
+          </view>
+          <view class="modal-buttons">
+            <button class="btn btn-secondary" @click="shareResult">分享成绩</button>
+            <button class="btn btn-secondary" @click="showDailyChallengeModal = false">关闭</button>
+          </view>
+        </view>
+
+        <!-- 已完成过：查看记录 -->
+        <view v-if="!dailyChallenge && dailyChallengeStats && dailyChallengeStats.todayCompleted">
+          <text class="modal-title">今日已完成</text>
+          <view v-if="dailyChallengeStats.todayResult" class="daily-result-stats">
+            <view class="stat-item">
+              <text class="stat-value">{{ dailyChallengeStats.todayResult.correct }} / {{ dailyChallengeStats.todayResult.total }}</text>
+              <text class="stat-label">正确数</text>
+            </view>
+            <view class="stat-item">
+              <text class="stat-value">{{ Math.round(dailyChallengeStats.todayResult.correct / dailyChallengeStats.todayResult.total * 100) }}%</text>
+              <text class="stat-label">正确率</text>
+            </view>
+          </view>
+          <view class="daily-streak-info">
+            <text class="daily-streak-text">连续挑战 {{ dailyChallengeStats.streak }} 天 | 累计 {{ dailyChallengeStats.totalDays }} 天</text>
+          </view>
+          <view class="modal-buttons">
+            <button class="btn btn-secondary" @click="showDailyChallengeModal = false">关闭</button>
+          </view>
+        </view>
+      </view>
+    </view>
+
     <!-- 保存游戏弹窗 -->
     <view v-if="showSaveModal" class="modal">
       <view class="modal-content save-modal">
@@ -394,6 +521,60 @@
       </view>
     </view>
 
+    <!-- PK挑战来袭弹窗 -->
+    <view v-if="showChallengeModal && pendingChallenge" class="modal">
+      <view class="modal-content">
+        <text class="modal-title">PK挑战来袭！</text>
+        <view class="challenge-info">
+          <text class="challenge-from">{{ pendingChallenge.challengerName }} 向你发起挑战</text>
+          <view class="challenge-stats">
+            <view class="stat-item">
+              <text class="stat-value">{{ pendingChallenge.score }}</text>
+              <text class="stat-label">得分</text>
+            </view>
+            <view class="stat-item">
+              <text class="stat-value">{{ pendingChallenge.wave }}</text>
+              <text class="stat-label">波数</text>
+            </view>
+            <view class="stat-item">
+              <text class="stat-value">{{ pendingChallenge.accuracy }}%</text>
+              <text class="stat-label">正确率</text>
+            </view>
+          </view>
+        </view>
+        <view class="modal-buttons">
+          <button class="btn btn-primary" @click="acceptChallenge">接受挑战</button>
+          <button class="btn btn-secondary" @click="showChallengeModal = false">下次再说</button>
+        </view>
+      </view>
+    </view>
+
+    <!-- PK对比结果弹窗 -->
+    <view v-if="showChallengeResultModal && challengeComparison" class="modal">
+      <view class="modal-content">
+        <text class="modal-title">{{ challengeComparison.winner === 'responder' ? '🎉 你赢了！' : challengeComparison.winner === 'challenger' ? '💪 对手更强' : '🤝 旗鼓相当' }}</text>
+        <view class="vs-table">
+          <view class="vs-header">
+            <text class="vs-label">项目</text>
+            <text class="vs-me">我</text>
+            <text class="vs-them">对手</text>
+          </view>
+          <view
+            v-for="(item, i) in challengeComparison.comparison"
+            :key="i"
+            class="vs-row"
+          >
+            <text class="vs-label">{{ item.label }}</text>
+            <text class="vs-me" :class="{ 'vs-winner': item.better === 'responder' }">{{ item.responder }}</text>
+            <text class="vs-them" :class="{ 'vs-winner': item.better === 'challenger' }">{{ item.challenger }}</text>
+          </view>
+        </view>
+        <view class="modal-buttons">
+          <button class="btn btn-primary" @click="showChallengeResultModal = false">确定</button>
+        </view>
+      </view>
+    </view>
+
     <!-- 隐藏的海报画布（用于分享图片） -->
     <!-- #ifdef MP-WEIXIN -->
     <canvas canvas-id="posterCanvas" class="poster-canvas"></canvas>
@@ -405,12 +586,13 @@
 </template>
 
 <script>
-import { Game, TOWER_LIST } from '@/game/tower-defense/index.js'
+import { Game, TOWER_LIST, DailySystem, encodeChallenge, decodeChallenge, compareResults, saveSentChallenge, saveChallengeResponse } from '@/game/tower-defense/index.js'
 import { CanvasAdapter } from '@/utils/canvas-adapter.js'
 import { generateRandomQuestion, generateOptions, checkAnswer } from '@/utils/math.js'
 import { storageManager } from '@/utils/storage-manager'
 import { LEVELS, getLevelConfig, isLevelUnlocked } from '@/game/tower-defense/config/levels.js'
 import { soundManager } from '@/utils/sound-manager'
+import { drawGameOverPoster, drawDailyChallengePoster, exportAndSavePoster } from '@/utils/poster-generator'
 
 export default {
   data() {
@@ -509,7 +691,31 @@ export default {
       randomQuestionTimer: null,
 
       // 音效开关
-      soundEnabled: true
+      soundEnabled: true,
+
+      // 签到系统
+      dailySystem: null,
+      showSigninModal: false,
+      signinStatus: null,
+      signinResult: null,
+
+      // 每日挑战
+      showDailyChallengeModal: false,
+      dailyChallenge: null,
+      dailyChallengeIndex: 0,
+      dailyChallengeCorrect: 0,
+      dailyChallengeStartTime: 0,
+      dailyChallengeFinished: false,
+      dailyChallengeResult: null,
+      dailyChallengeStats: null,
+      dailyChallengeSelected: null,
+      dailyChallengeFeedback: '',
+
+      // PK挑战
+      pendingChallenge: null,
+      showChallengeModal: false,
+      showChallengeResultModal: false,
+      challengeComparison: null
     }
   },
 
@@ -622,6 +828,7 @@ export default {
       if (this.currentUser) {
         this.loadLevelProgress()
         this.refreshSaveSlots()
+        this.initSigninSystem()
       }
     },
 
@@ -644,6 +851,7 @@ export default {
       storageManager.setCurrentUser(user.id)
       this.loadLevelProgress()
       this.refreshSaveSlots()
+      this.initSigninSystem()
       this.showProfileModal = false
       uni.showToast({ title: `切换到 ${user.name}`, icon: 'success' })
     },
@@ -668,6 +876,180 @@ export default {
           }
         }
       })
+    },
+
+    // 签到系统
+    initSigninSystem() {
+      this.dailySystem = new DailySystem()
+      this.dailySystem.load()
+      this.signinStatus = this.dailySystem.getSigninStatus()
+      this.dailyChallengeStats = this.dailySystem.getDailyChallengeStats()
+
+      // 未签到时自动弹窗
+      if (!this.signinStatus.todaySigned) {
+        this.signinResult = null
+        this.showSigninModal = true
+      }
+    },
+
+    // 每日挑战
+    openDailyChallenge() {
+      if (!this.dailySystem) return
+
+      this.dailyChallengeStats = this.dailySystem.getDailyChallengeStats()
+
+      if (this.dailyChallengeStats.todayCompleted) {
+        // 今日已完成，显示记录
+        this.dailyChallenge = null
+        this.dailyChallengeFinished = false
+        this.showDailyChallengeModal = true
+        return
+      }
+
+      // 生成今日挑战
+      this.dailyChallenge = this.dailySystem.getTodayChallenge()
+      this.dailyChallengeIndex = 0
+      this.dailyChallengeCorrect = 0
+      this.dailyChallengeStartTime = Date.now()
+      this.dailyChallengeFinished = false
+      this.dailyChallengeResult = null
+      this.dailyChallengeSelected = null
+      this.dailyChallengeFeedback = ''
+      this.showDailyChallengeModal = true
+    },
+
+    selectDailyChallengeOption(option) {
+      if (this.dailyChallengeFeedback) return
+      if (!this.dailyChallenge) return
+
+      const q = this.dailyChallenge.questions[this.dailyChallengeIndex]
+      this.dailyChallengeSelected = option
+
+      const isCorrect = option === q.answer
+      if (isCorrect) {
+        this.dailyChallengeCorrect++
+        this.dailyChallengeFeedback = 'correct'
+        soundManager.correct()
+      } else {
+        this.dailyChallengeFeedback = 'wrong'
+        soundManager.wrong()
+      }
+
+      setTimeout(() => {
+        this.dailyChallengeFeedback = ''
+        this.dailyChallengeSelected = null
+        this.dailyChallengeIndex++
+
+        if (this.dailyChallengeIndex >= this.dailyChallenge.totalCount) {
+          this.finishDailyChallenge()
+        }
+      }, isCorrect ? 600 : 1200)
+    },
+
+    finishDailyChallenge() {
+      const elapsed = Date.now() - this.dailyChallengeStartTime
+      const seconds = Math.round(elapsed / 1000)
+      const minutes = Math.floor(seconds / 60)
+      const secs = seconds % 60
+      const timeStr = minutes > 0 ? `${minutes}分${secs}秒` : `${secs}秒`
+
+      const total = this.dailyChallenge.totalCount
+      const correct = this.dailyChallengeCorrect
+      const accuracy = Math.round(correct / total * 100)
+      const score = correct * 20 + (accuracy >= 80 ? 50 : 0) + (accuracy === 100 ? 100 : 0)
+
+      this.dailyChallengeResult = {
+        correct,
+        total,
+        accuracy,
+        time: seconds,
+        timeStr,
+        score
+      }
+
+      // 保存结果
+      this.dailySystem.saveDailyChallengeResult(this.dailyChallengeResult)
+      this.dailyChallengeStats = this.dailySystem.getDailyChallengeStats()
+      this.dailyChallengeFinished = true
+
+      if (accuracy === 100) {
+        soundManager.victory()
+      } else {
+        soundManager.achievement()
+      }
+    },
+
+    // PK挑战
+    prepareChallenge() {
+      // 标记正在发起挑战，onShareAppMessage 会使用此标记
+      this._isChallengeShare = true
+    },
+
+    acceptChallenge() {
+      if (!this.pendingChallenge) return
+      const levelId = this.pendingChallenge.levelId
+      const level = this.LEVELS.find(l => l.id === levelId)
+      if (!level) {
+        uni.showToast({ title: '关卡不存在', icon: 'none' })
+        return
+      }
+      if (!this.isLevelUnlocked(levelId, this.levelProgress)) {
+        uni.showToast({ title: '关卡未解锁', icon: 'none' })
+        return
+      }
+      this.showChallengeModal = false
+      soundManager.init()
+      this.selectedLevel = level
+      this.startGame()
+    },
+
+    // 订阅消息（微信小程序）
+    requestSubscribeMessage() {
+      // #ifdef MP-WEIXIN
+      // 防止频繁提示：每3天最多提示一次
+      const lastPrompt = storageManager.loadData('subscribe_prompt_time', 0)
+      const now = Date.now()
+      if (lastPrompt && now - lastPrompt < 3 * 24 * 60 * 60 * 1000) {
+        return
+      }
+
+      // 需要在微信公众平台配置模板ID后替换
+      // 此处使用占位符，实际部署时替换为真实模板ID
+      const tmplIds = []
+      if (tmplIds.length === 0) return
+
+      wx.requestSubscribeMessage({
+        tmplIds,
+        success: () => {
+          storageManager.saveData('subscribe_prompt_time', now)
+        },
+        fail: () => {
+          storageManager.saveData('subscribe_prompt_time', now)
+        }
+      })
+      // #endif
+    },
+
+    handleChallengeResult(myResult) {
+      if (!this.pendingChallenge) return
+      const comparison = compareResults(this.pendingChallenge, myResult)
+      this.challengeComparison = comparison
+      saveChallengeResponse(this.pendingChallenge, myResult)
+      // 延迟显示PK对比（等游戏结束弹窗关闭后）
+      setTimeout(() => {
+        this.showChallengeResultModal = true
+      }, 500)
+    },
+
+    doSignin() {
+      if (!this.dailySystem) return
+      const result = this.dailySystem.signin()
+      if (result.success) {
+        this.signinResult = result
+        this.signinStatus = this.dailySystem.getSigninStatus()
+        soundManager.gold()
+        uni.showToast({ title: `签到成功！${result.reward.label}`, icon: 'none', duration: 2000 })
+      }
     },
 
     // 关卡进度管理
@@ -876,9 +1258,9 @@ export default {
         // 监听工具事件
         this.setupGameEvents()
 
-        // 初始化并启动工具
+        // 初始化并启动工具（带5秒延迟）
         this.game.init()
-        this.game.start()
+        this.game.startWithDelay()
 
         // 启动随机出题定时器
         this.startRandomQuestionTimer()
@@ -985,6 +1367,16 @@ export default {
         // 保存关卡进度
         if (result.levelId) {
           this.saveLevelProgress(result.levelId, result)
+        }
+
+        // PK挑战对比
+        if (this.pendingChallenge) {
+          this.handleChallengeResult(result)
+        }
+
+        // 胜利后延迟请求订阅消息
+        if (result.win) {
+          setTimeout(() => this.requestSubscribeMessage(), 2000)
         }
       })
 
@@ -1223,162 +1615,43 @@ export default {
     shareResultWx() {
       uni.showLoading({ title: '生成海报...' })
 
-      const w = 600
-      const h = 900
       const ctx = uni.createCanvasContext('posterCanvas', this)
-
-      // 背景渐变
-      const grd = ctx.createLinearGradient(0, 0, 0, h)
-      grd.addColorStop(0, '#1a1a2e')
-      grd.addColorStop(1, '#16213e')
-      ctx.setFillStyle(grd)
-      ctx.fillRect(0, 0, w, h)
-
-      // 标题
-      ctx.setFillStyle('#ffffff')
-      ctx.setFontSize(40)
-      ctx.setTextAlign('center')
-      ctx.fillText('🏰 数学塔防', w / 2, 80)
-
-      // 结果
-      ctx.setFontSize(32)
-      ctx.setFillStyle(this.gameResult.win ? '#4CAF50' : '#FF9800')
-      ctx.fillText(this.gameResult.win ? '🎉 胜利！' : '💪 挑战结束', w / 2, 140)
-
-      // 星级
-      const stars = this.gameResult.stars || 0
-      let starText = ''
-      for (let i = 1; i <= 3; i++) {
-        starText += i <= stars ? '⭐' : '☆'
-      }
-      ctx.setFontSize(44)
-      ctx.setFillStyle('#FFD700')
-      ctx.fillText(starText, w / 2, 210)
-
-      // 分隔线
-      ctx.setStrokeStyle('rgba(255,255,255,0.15)')
-      ctx.setLineWidth(1)
-      ctx.beginPath()
-      ctx.moveTo(60, 250)
-      ctx.lineTo(w - 60, 250)
-      ctx.stroke()
-
-      // 数据卡片背景
-      ctx.setFillStyle('rgba(0,0,0,0.3)')
-      this._roundRect(ctx, 40, 280, w - 80, 320, 20)
-      ctx.fill()
-
-      // 数据展示 - 2x2网格
-      const dataItems = [
-        { label: '波数', value: this.gameResult.wave, color: '#4CAF50' },
-        { label: '正确率', value: this.gameResult.accuracy + '%', color: '#2196F3' },
-        { label: '最高连击', value: this.gameResult.maxCombo, color: '#FF9800' },
-        { label: '得分', value: this.gameResult.score || 0, color: '#E040FB' }
-      ]
-
-      const colW = (w - 80) / 2
-      const startX = 40
-      const startY = 320
-      dataItems.forEach((item, i) => {
-        const col = i % 2
-        const row = Math.floor(i / 2)
-        const cx = startX + colW * col + colW / 2
-        const cy = startY + row * 150
-
-        ctx.setFillStyle(item.color)
-        ctx.setFontSize(48)
-        ctx.setTextAlign('center')
-        ctx.fillText(String(item.value), cx, cy)
-
-        ctx.setFillStyle('rgba(255,255,255,0.6)')
-        ctx.setFontSize(24)
-        ctx.fillText(item.label, cx, cy + 40)
-      })
-
-      // 激励语
-      ctx.setFillStyle('rgba(76,175,80,0.2)')
-      this._roundRect(ctx, 40, 640, w - 80, 70, 16)
-      ctx.fill()
-
-      ctx.setFillStyle('#4CAF50')
-      ctx.setFontSize(24)
-      ctx.setTextAlign('center')
-      ctx.fillText(this.gameResult.encouragement || '继续加油！', w / 2, 685)
-
-      // 底部
-      ctx.setFillStyle('rgba(255,255,255,0.3)')
-      ctx.setFontSize(20)
-      ctx.fillText('— 数学塔防 · 边玩边学 —', w / 2, 780)
-
-      ctx.setFillStyle('rgba(255,255,255,0.2)')
-      ctx.setFontSize(18)
       const userName = this.currentUser ? this.currentUser.name : ''
-      if (userName) {
-        ctx.fillText(`玩家: ${userName}`, w / 2, 820)
+
+      if (this.showDailyChallengeModal && this.dailyChallengeResult) {
+        drawDailyChallengePoster(ctx, {
+          result: this.dailyChallengeResult,
+          stats: this.dailyChallengeStats,
+          userName
+        })
+      } else {
+        drawGameOverPoster(ctx, {
+          gameResult: this.gameResult,
+          userName
+        })
       }
 
-      // 绘制完成后导出图片
       ctx.draw(false, () => {
-        setTimeout(() => {
-          uni.canvasToTempFilePath({
-            canvasId: 'posterCanvas',
-            width: w,
-            height: h,
-            destWidth: w * 2,
-            destHeight: h * 2,
-            success: (res) => {
-              uni.hideLoading()
-              // 保存到相册
-              uni.saveImageToPhotosAlbum({
-                filePath: res.tempFilePath,
-                success: () => {
-                  uni.showToast({ title: '已保存到相册', icon: 'success' })
-                },
-                fail: (err) => {
-                  if (err.errMsg && err.errMsg.includes('auth deny')) {
-                    uni.showModal({
-                      title: '提示',
-                      content: '需要授权保存图片到相册',
-                      success: (modalRes) => {
-                        if (modalRes.confirm) {
-                          uni.openSetting()
-                        }
-                      }
-                    })
-                  } else {
-                    // 预览图片作为备选
-                    uni.previewImage({ urls: [res.tempFilePath] })
-                  }
-                }
-              })
-            },
-            fail: () => {
-              uni.hideLoading()
-              uni.showToast({ title: '生成图片失败', icon: 'none' })
-            }
-          }, this)
-        }, 300)
+        exportAndSavePoster(this, 'posterCanvas')
       })
-    },
-
-    _roundRect(ctx, x, y, w, h, r) {
-      ctx.beginPath()
-      ctx.moveTo(x + r, y)
-      ctx.lineTo(x + w - r, y)
-      ctx.arcTo(x + w, y, x + w, y + r, r)
-      ctx.lineTo(x + w, y + h - r)
-      ctx.arcTo(x + w, y + h, x + w - r, y + h, r)
-      ctx.lineTo(x + r, y + h)
-      ctx.arcTo(x, y + h, x, y + h - r, r)
-      ctx.lineTo(x, y + r)
-      ctx.arcTo(x, y, x + r, y, r)
-      ctx.closePath()
     }
   },
 
-  onLoad() {
+  onLoad(options) {
     // 加载用户档案
     this.loadProfile()
+
+    // 解析PK挑战参数
+    if (options && options.challenge) {
+      const challenge = decodeChallenge(options.challenge)
+      if (challenge) {
+        this.pendingChallenge = challenge
+        // 延迟显示挑战弹窗（等档案加载完成）
+        setTimeout(() => {
+          this.showChallengeModal = true
+        }, 500)
+      }
+    }
   },
 
   onHide() {
@@ -1402,6 +1675,27 @@ export default {
   // #ifdef MP-WEIXIN
   onShareAppMessage() {
     const result = this.gameResult
+
+    // PK挑战分享
+    if (this._isChallengeShare && this.showGameOverModal && result && result.levelId) {
+      this._isChallengeShare = false
+      const userName = this.currentUser ? this.currentUser.name : '挑战者'
+      const code = encodeChallenge({
+        levelId: result.levelId,
+        score: result.score || 0,
+        stars: result.stars || 0,
+        wave: result.wave,
+        accuracy: result.accuracy,
+        maxCombo: result.maxCombo,
+        challengerName: userName
+      })
+      saveSentChallenge({ levelId: result.levelId, score: result.score })
+      return {
+        title: `⚔️ ${userName}向你发起数学塔防PK挑战！得分${result.score}，敢来比吗？`,
+        path: `/pages/tower-defense/index?challenge=${code}`
+      }
+    }
+
     if (this.showGameOverModal && result) {
       return {
         title: `🏰 我在数学塔防坚守了${result.wave}波！正确率${result.accuracy}%！`,
@@ -2314,5 +2608,218 @@ export default {
 .action-cost, .action-price {
   font-size: 22rpx;
   color: #FFD700;
+}
+
+/* 签到弹窗 */
+.signin-modal {
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.signin-result {
+  background: linear-gradient(135deg, rgba(76, 175, 80, 0.3), rgba(33, 150, 243, 0.3));
+  border-radius: 16rpx;
+  padding: 24rpx;
+  margin-bottom: 24rpx;
+}
+
+.signin-result-text {
+  display: block;
+  font-size: 36rpx;
+  font-weight: bold;
+  color: #FFD700;
+  margin-bottom: 8rpx;
+}
+
+.signin-streak {
+  display: block;
+  font-size: 24rpx;
+  color: #a0a0a0;
+}
+
+.signin-calendar {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12rpx;
+  margin-bottom: 24rpx;
+}
+
+.signin-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16rpx 8rpx;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12rpx;
+  border: 2rpx solid rgba(255, 255, 255, 0.1);
+  position: relative;
+}
+
+.signin-day.signed {
+  background: rgba(76, 175, 80, 0.2);
+  border-color: #4CAF50;
+}
+
+.signin-day.today {
+  border-color: #FFD700;
+  background: rgba(255, 215, 0, 0.15);
+}
+
+.signin-day-num {
+  font-size: 22rpx;
+  color: #a0a0a0;
+  margin-bottom: 6rpx;
+}
+
+.signin-day-reward {
+  font-size: 22rpx;
+  color: #FFD700;
+  font-weight: bold;
+}
+
+.signin-check {
+  position: absolute;
+  top: 4rpx;
+  right: 8rpx;
+  font-size: 20rpx;
+  color: #4CAF50;
+}
+
+/* 每日挑战 */
+.daily-btn {
+  position: relative;
+}
+
+.daily-done-tag {
+  font-size: 20rpx;
+  background: rgba(255, 215, 0, 0.3);
+  color: #FFD700;
+  padding: 4rpx 12rpx;
+  border-radius: 12rpx;
+  margin-left: 12rpx;
+}
+
+.daily-challenge-modal {
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.daily-progress {
+  margin-bottom: 24rpx;
+}
+
+.daily-progress-text {
+  display: block;
+  font-size: 24rpx;
+  color: #a0a0a0;
+  margin-bottom: 12rpx;
+}
+
+.daily-progress-bar {
+  height: 8rpx;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4rpx;
+  overflow: hidden;
+}
+
+.daily-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #4CAF50, #8BC34A);
+  border-radius: 4rpx;
+  transition: width 0.3s ease;
+}
+
+.daily-result-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16rpx;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 16rpx;
+  padding: 24rpx;
+  margin-bottom: 24rpx;
+}
+
+.daily-streak-info {
+  background: rgba(255, 152, 0, 0.15);
+  border-radius: 12rpx;
+  padding: 16rpx;
+  margin-bottom: 24rpx;
+}
+
+.daily-streak-text {
+  font-size: 26rpx;
+  color: #FF9800;
+  font-weight: bold;
+}
+
+/* PK挑战 */
+.challenge-info {
+  margin-bottom: 24rpx;
+}
+
+.challenge-from {
+  display: block;
+  font-size: 28rpx;
+  color: #FF9800;
+  font-weight: bold;
+  margin-bottom: 20rpx;
+}
+
+.challenge-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16rpx;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 16rpx;
+  padding: 20rpx;
+}
+
+/* VS对比表 */
+.vs-table {
+  margin-bottom: 24rpx;
+}
+
+.vs-header, .vs-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  padding: 16rpx 12rpx;
+  text-align: center;
+}
+
+.vs-header {
+  border-bottom: 2rpx solid rgba(255, 255, 255, 0.1);
+  margin-bottom: 8rpx;
+}
+
+.vs-header .vs-label {
+  color: #a0a0a0;
+  font-size: 24rpx;
+}
+
+.vs-header .vs-me {
+  color: #4CAF50;
+  font-size: 24rpx;
+  font-weight: bold;
+}
+
+.vs-header .vs-them {
+  color: #FF9800;
+  font-size: 24rpx;
+  font-weight: bold;
+}
+
+.vs-row .vs-label {
+  font-size: 24rpx;
+  color: #a0a0a0;
+}
+
+.vs-row .vs-me, .vs-row .vs-them {
+  font-size: 28rpx;
+  color: #ffffff;
+}
+
+.vs-winner {
+  color: #FFD700 !important;
+  font-weight: bold;
 }
 </style>
