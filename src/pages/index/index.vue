@@ -1,7 +1,7 @@
 <template>
   <view class="container">
     <!-- 顶部标题 -->
-    <view class="header">
+    <view class="header" :style="{ paddingTop: navPaddingTop + 'px' }">
       <text class="title">🎮 数学工具集合</text>
       <text class="subtitle">边玩边学，快乐成长</text>
     </view>
@@ -48,9 +48,12 @@
 </template>
 
 <script>
+import { soundManager } from '@/utils/sound-manager'
+
 export default {
   data() {
     return {
+      navPaddingTop: 0,
       games: [
         {
           id: 'tower-defense',
@@ -91,6 +94,12 @@ export default {
       ]
     }
   },
+  onLoad() {
+    // #ifdef MP-WEIXIN
+    const menuBtn = wx.getMenuButtonBoundingClientRect()
+    this.navPaddingTop = menuBtn.top + menuBtn.height + 8
+    // #endif
+  },
   methods: {
     openICP() {
       // #ifdef H5
@@ -98,6 +107,8 @@ export default {
       // #endif
     },
     openGame(game) {
+      soundManager.init()
+      soundManager.click()
       if (game.comingSoon) {
         uni.showToast({
           title: '敬请期待',
@@ -109,7 +120,21 @@ export default {
         url: game.path
       })
     }
+  },
+
+  // #ifdef MP-WEIXIN
+  onShareAppMessage() {
+    return {
+      title: '数学工具集合 - 边玩边学，快乐成长！',
+      path: '/pages/index/index'
+    }
+  },
+  onShareTimeline() {
+    return {
+      title: '数学工具集合 - 边玩边学，快乐成长！'
+    }
   }
+  // #endif
 }
 </script>
 

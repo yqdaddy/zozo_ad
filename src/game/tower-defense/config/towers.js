@@ -56,6 +56,22 @@ export const TOWER_CONFIGS = {
     slowEffect: 0.5,
     slowDuration: 2000,
     description: '减速敌人'
+  },
+  goldMine: {
+    name: '金币矿场',
+    emoji: '⛏️',
+    cost: 120,
+    health: 80,
+    damage: 0,
+    range: 0,
+    fireRate: 0,
+    projectileSpeed: 0,
+    color: '#FFD700',
+    projectileColor: '#FFD700',
+    description: '每10秒生产金币',
+    isGoldMine: true,
+    goldPerCycle: 12,
+    productionInterval: 10000
   }
 }
 

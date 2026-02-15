@@ -95,6 +95,14 @@ export class PathSystem {
   }
 
   /**
+   * 设置路径（存档恢复用）
+   */
+  setPath(pathData, pathGridData) {
+    this.path = pathData
+    this.pathGrid = pathGridData
+  }
+
+  /**
    * 获取路径
    */
   getPath() {

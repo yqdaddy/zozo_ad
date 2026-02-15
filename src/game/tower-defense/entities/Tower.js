@@ -39,6 +39,14 @@ export class Tower extends Entity {
     this.slowEffect = config.slowEffect || 0
     this.slowDuration = config.slowDuration || 0
 
+    // 金币矿场属性
+    this.isGoldMine = config.isGoldMine || false
+    if (this.isGoldMine) {
+      this.goldPerCycle = config.goldPerCycle || 12
+      this.productionInterval = config.productionInterval || 10000
+      this.productionTimer = 0
+    }
+
     // 视觉属性
     this.emoji = config.emoji
     this.color = config.color
@@ -51,6 +59,19 @@ export class Tower extends Entity {
    * 更新
    */
   update(dt) {
+    // 金币矿场：产金逻辑
+    if (this.isGoldMine) {
+      this.productionTimer += dt * this.game.state.gameSpeed
+      if (this.productionTimer >= this.productionInterval) {
+        this.productionTimer -= this.productionInterval
+        const amount = Math.floor(this.goldPerCycle * (1 + (this.level - 1) * 0.5))
+        this.game.addGold(amount)
+        this.game.createGoldEffect(this.x, this.y)
+        this.game.events.emit('goldProduced', { amount })
+      }
+      return
+    }
+
     // 寻找目标
     this.findTarget()
 
@@ -124,6 +145,9 @@ export class Tower extends Entity {
    * 获取升级费用
    */
   getUpgradeCost() {
+    if (this.isGoldMine) {
+      return Math.floor(this.baseConfig.cost * this.level * 1.0)
+    }
     return getUpgradeCost(this.baseConfig.cost, this.level)
   }
 
@@ -179,6 +203,17 @@ export class Tower extends Entity {
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
     ctx.fillText(this.emoji, this.x, this.y)
+
+    // 金币矿场进度环
+    if (this.isGoldMine) {
+      const progress = this.productionTimer / this.productionInterval
+      ctx.strokeStyle = '#FFD700'
+      ctx.lineWidth = 3
+      ctx.beginPath()
+      ctx.arc(this.x, this.y, size / 2 + 3, -Math.PI / 2, -Math.PI / 2 + progress * Math.PI * 2)
+      ctx.stroke()
+      ctx.lineWidth = 1
+    }
 
     // 等级标识
     if (this.level > 1) {

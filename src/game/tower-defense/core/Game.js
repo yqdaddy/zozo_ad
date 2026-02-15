@@ -11,8 +11,9 @@ import { Tower } from '../entities/Tower.js'
 import { Enemy } from '../entities/Enemy.js'
 import { Projectile } from '../entities/Projectile.js'
 import { Particle } from '../entities/Particle.js'
+import { SaveSystem } from '../systems/SaveSystem.js'
 import { TOWER_CONFIGS } from '../config/towers.js'
-import { getWaveEnemies, ENEMY_CONFIGS } from '../config/enemies.js'
+import { getWaveEnemies, ENEMY_CONFIGS, getEnemyStats } from '../config/enemies.js'
 import { shuffleArray } from '@/utils/math.js'
 
 export class Game {
@@ -53,6 +54,9 @@ export class Game {
       ...config
     }
 
+    // 关卡配置
+    this.levelConfig = config.levelConfig || null
+
     // 选择的塔类型
     this.selectedTower = null
 
@@ -61,6 +65,7 @@ export class Game {
     this.comboSystem = new ComboSystem(this)
     this.difficultySystem = new DifficultySystem(this)
     this.achievementSystem = new AchievementSystem(this)
+    this.saveSystem = new SaveSystem(this)
 
     // 工具循环
     this.gameLoop = new GameLoop(this)
@@ -107,9 +112,10 @@ export class Game {
    * 重置工具状态
    */
   reset() {
+    const lc = this.levelConfig
     this.state = {
-      lives: 20,
-      gold: 100,
+      lives: lc ? lc.startingLives : 20,
+      gold: lc ? lc.startingGold : 100,
       wave: 1,
       gameSpeed: 1,
       score: 0,
@@ -130,6 +136,11 @@ export class Game {
     this.comboSystem.resetCombo()
     this.difficultySystem.reset()
     this.achievementSystem.reset()
+
+    // 应用关卡数学题范围约束
+    if (lc && lc.mathDiffRange) {
+      this.difficultySystem.setMathDiffRange(lc.mathDiffRange)
+    }
 
     this.events.emit('stateChange', this.state)
   }
@@ -230,6 +241,9 @@ export class Game {
 
     // 绘制连击显示
     this.comboSystem.render(ctx)
+
+    // 提交绘制（小程序旧 API 需要）
+    this.canvasAdapter.commit()
   }
 
   /**
@@ -263,7 +277,12 @@ export class Game {
     const existingTower = this.towers.find(t => t.gridX === gridX && t.gridY === gridY)
 
     if (existingTower) {
-      this.tryUpgradeTower(existingTower)
+      // 显示塔操作菜单
+      this.events.emit('showTowerMenu', {
+        tower: existingTower,
+        upgradeCost: existingTower.getUpgradeCost(),
+        sellPrice: this.getSellPrice(existingTower)
+      })
     } else if (this.selectedTower) {
       this.tryBuildTower(gridX, gridY)
     } else {
@@ -341,6 +360,7 @@ export class Game {
 
     // 建造特效
     this.createBuildEffect(tower.x, tower.y)
+    this.events.emit('towerBuilt', { tower })
 
     // 清除选择
     this.selectedTower = null
@@ -399,7 +419,39 @@ export class Game {
 
     // 升级特效
     this.createBuildEffect(tower.x, tower.y)
+    this.events.emit('towerUpgraded', { tower })
     this.events.emit('stateChange', this.state)
+  }
+
+  /**
+   * 获取塔的售价
+   */
+  getSellPrice(tower) {
+    // 返回总投资的50%（基础成本 * 等级 * 0.5）
+    return Math.floor(tower.baseConfig.cost * 0.5 * tower.level)
+  }
+
+  /**
+   * 出售塔
+   */
+  sellTower(tower) {
+    const sellPrice = this.getSellPrice(tower)
+
+    // 添加金币
+    this.state.gold += sellPrice
+
+    // 创建死亡特效
+    this.createDeathEffect(tower.x, tower.y, '#888')
+
+    // 从数组中移除塔
+    const index = this.towers.indexOf(tower)
+    if (index > -1) {
+      this.towers.splice(index, 1)
+    }
+
+    // 通知状态变化
+    this.events.emit('stateChange', this.state)
+    this.events.emit('showToast', { title: `拆除成功！+${sellPrice}💰`, icon: 'success' })
   }
 
   /**
@@ -429,6 +481,7 @@ export class Game {
   startWave() {
     this.state.waveInProgress = true
     this.achievementSystem.updateStat('wave', this.state.wave)
+    this.events.emit('waveStart', { wave: this.state.wave })
 
     const enemies = getWaveEnemies(this.state.wave)
     const shuffled = shuffleArray(enemies)
@@ -461,7 +514,11 @@ export class Game {
    * 生成单个敌人
    */
   spawnEnemy(type) {
-    const enemy = new Enemy(this, type, this.pathSystem.getPath(), this.state.wave)
+    const levelMul = this.levelConfig ? {
+      healthMul: this.levelConfig.enemyHealthMul,
+      speedMul: this.levelConfig.enemySpeedMul
+    } : {}
+    const enemy = new Enemy(this, type, this.pathSystem.getPath(), this.state.wave, levelMul)
     this.enemies.push(enemy)
   }
 
@@ -470,12 +527,22 @@ export class Game {
    */
   checkWaveComplete() {
     if (this.enemies.length === 0 && !this.state.waveInProgress && !this.state.isGameOver) {
+      // 自动存档
+      this.saveSystem.autoSave()
+
+      // 检查关卡胜利
+      if (this.levelConfig && this.state.wave >= this.levelConfig.totalWaves) {
+        this.gameOver(true)
+        return
+      }
+
       this.state.wave++
       this.state.gold += 30 + this.state.wave * 10
       this.state.waveInProgress = true
 
       // 检查是否满血通过
-      if (this.state.lives === 20) {
+      const startingLives = this.levelConfig ? this.levelConfig.startingLives : 20
+      if (this.state.lives === startingLives) {
         this.achievementSystem.updateStat('perfectWaves', v => v + 1)
       }
 
@@ -568,6 +635,84 @@ export class Game {
   }
 
   /**
+   * 创建金色粒子特效（矿场产金）
+   */
+  createGoldEffect(x, y) {
+    for (let i = 0; i < 8; i++) {
+      const angle = Math.random() * Math.PI * 2
+      this.particles.push(new Particle(this, {
+        x, y,
+        vx: Math.cos(angle) * 1.5,
+        vy: -1 - Math.random() * 2,
+        life: 25,
+        color: '#FFD700',
+        size: 4
+      }))
+    }
+  }
+
+  /**
+   * 保存游戏到指定槽位
+   */
+  saveGame(slot) {
+    this.saveSystem.saveToSlot(slot)
+  }
+
+  /**
+   * 从存档恢复游戏
+   */
+  loadGame(saveData) {
+    // 恢复路径
+    this.pathSystem.setPath(saveData.path, saveData.pathGrid)
+
+    // 恢复状态
+    this.state = {
+      ...this.state,
+      lives: saveData.state.lives,
+      gold: saveData.state.gold,
+      wave: saveData.state.wave,
+      score: saveData.state.score,
+      questionsAnswered: saveData.state.questionsAnswered,
+      questionsCorrect: saveData.state.questionsCorrect,
+      enemiesKilled: saveData.state.enemiesKilled,
+      waveInProgress: false
+    }
+
+    // 恢复防御塔
+    this.towers = []
+    for (const td of saveData.towers) {
+      const tower = new Tower(this, td.gridX, td.gridY, td.type)
+      // 升级到保存的等级
+      while (tower.level < td.level) {
+        tower.upgrade()
+      }
+      tower.health = td.health
+      this.towers.push(tower)
+    }
+
+    // 恢复难度
+    if (saveData.difficulty) {
+      this.difficultySystem.currentDifficulty = saveData.difficulty.current
+      this.difficultySystem.history = saveData.difficulty.history || []
+    }
+
+    // 恢复连击
+    if (saveData.combo) {
+      this.comboSystem.combo = saveData.combo.combo
+      this.comboSystem.maxCombo = saveData.combo.maxCombo
+    }
+
+    this.enemies = []
+    this.projectiles = []
+    this.particles = []
+
+    this.events.emit('stateChange', this.state)
+
+    // 开始当前波次
+    this.startWave()
+  }
+
+  /**
    * 暂停
    */
   pause() {
@@ -610,6 +755,7 @@ export class Game {
 
     const result = {
       win,
+      levelId: this.levelConfig ? this.levelConfig.id : null,
       wave: this.state.wave,
       enemiesKilled: this.state.enemiesKilled,
       questionsCorrect: this.state.questionsCorrect,

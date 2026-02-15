@@ -20,12 +20,42 @@ export class GameLoop {
   }
 
   /**
+   * 获取当前时间（兼容小程序）
+   */
+  _now() {
+    if (typeof performance !== 'undefined' && performance.now) {
+      return performance.now()
+    }
+    return Date.now()
+  }
+
+  /**
+   * 请求下一帧（兼容小程序）
+   */
+  _requestFrame(callback) {
+    if (typeof requestAnimationFrame !== 'undefined') {
+      return requestAnimationFrame(callback)
+    }
+    return setTimeout(callback, this.frameInterval)
+  }
+
+  /**
+   * 取消帧请求（兼容小程序）
+   */
+  _cancelFrame(id) {
+    if (typeof cancelAnimationFrame !== 'undefined') {
+      return cancelAnimationFrame(id)
+    }
+    return clearTimeout(id)
+  }
+
+  /**
    * 开始工具循环
    */
   start() {
     this.running = true
     this.paused = false
-    this.lastTime = performance.now()
+    this.lastTime = this._now()
     this.loop()
   }
 
@@ -41,7 +71,7 @@ export class GameLoop {
    */
   resume() {
     this.paused = false
-    this.lastTime = performance.now()
+    this.lastTime = this._now()
   }
 
   /**
@@ -50,7 +80,7 @@ export class GameLoop {
   stop() {
     this.running = false
     if (this.animationId) {
-      cancelAnimationFrame(this.animationId)
+      this._cancelFrame(this.animationId)
       this.animationId = null
     }
   }
@@ -61,7 +91,7 @@ export class GameLoop {
   loop() {
     if (!this.running) return
 
-    const currentTime = performance.now()
+    const currentTime = this._now()
     const dt = currentTime - this.lastTime
     this.lastTime = currentTime
 
@@ -77,7 +107,7 @@ export class GameLoop {
     }
     this.game.render()
 
-    this.animationId = requestAnimationFrame(() => this.loop())
+    this.animationId = this._requestFrame(() => this.loop())
   }
 
   /**

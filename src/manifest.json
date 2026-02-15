@@ -17,7 +17,7 @@
     "sdkConfigs": {}
   },
   "mp-weixin": {
-    "appid": "",
+    "appid": "wxa65aae633501c125",
     "setting": {
       "urlCheck": false,
       "es6": true,

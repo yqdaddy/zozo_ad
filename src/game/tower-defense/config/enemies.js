@@ -153,27 +153,33 @@ export function getWaveEnemies(wave) {
  * @param {String} type - 敌人类型
  * @param {Number} wave - 当前波次
  */
-export function getEnemyStats(type, wave) {
+/**
+ * @param {String} type - 敌人类型
+ * @param {Number} wave - 当前波次
+ * @param {Object} levelMul - 关卡难度系数 { healthMul, speedMul }
+ */
+export function getEnemyStats(type, wave, levelMul = {}) {
   const base = ENEMY_CONFIGS[type]
+  const { healthMul = 1, speedMul = 1 } = levelMul
 
   // 分阶段的生命值加成
   let healthMultiplier
   if (wave <= 3) {
-    // 入门阶段：几乎无加成
     healthMultiplier = 1 + (wave - 1) * 0.05
   } else if (wave <= 6) {
-    // 初级阶段：轻微加成
     healthMultiplier = 1.1 + (wave - 3) * 0.1
   } else if (wave <= 10) {
-    // 中级阶段：适中加成
     healthMultiplier = 1.4 + (wave - 6) * 0.15
   } else {
-    // 困难阶段：显著加成
     healthMultiplier = 2 + (wave - 10) * 0.2
   }
 
+  // 应用关卡难度系数
+  healthMultiplier *= healthMul
+
   // 速度在后期略微提升（最多增加 30%）
-  const speedMultiplier = wave > 10 ? Math.min(1.3, 1 + (wave - 10) * 0.03) : 1
+  let speedMultiplier = wave > 10 ? Math.min(1.3, 1 + (wave - 10) * 0.03) : 1
+  speedMultiplier *= speedMul
 
   return {
     ...base,

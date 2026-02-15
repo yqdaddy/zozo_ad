@@ -5,11 +5,11 @@ import { Entity } from './Entity.js'
 import { ENEMY_CONFIGS, getEnemyStats } from '../config/enemies.js'
 
 export class Enemy extends Entity {
-  constructor(game, type, path, wave) {
+  constructor(game, type, path, wave, levelMul = {}) {
     const startPos = path[0]
     super(game, startPos.x, startPos.y)
 
-    const stats = getEnemyStats(type, wave)
+    const stats = getEnemyStats(type, wave, levelMul)
 
     this.type = type
     this.path = path

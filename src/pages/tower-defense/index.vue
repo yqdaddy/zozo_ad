@@ -3,10 +3,18 @@
     <!-- 主菜单 -->
     <view v-if="screen === 'menu'" class="screen menu-screen">
       <view class="menu-content">
+        <!-- 用户档案显示 -->
+        <view v-if="currentUser" class="profile-display">
+          <text class="profile-avatar">{{ currentUser.avatar || '👤' }}</text>
+          <text class="profile-name">{{ currentUser.name }}</text>
+        </view>
+
         <text class="title">🏰 数学塔防</text>
         <text class="subtitle">五年级 + 初一</text>
         <view class="menu-buttons">
-          <button class="btn btn-primary" @click="startGame">开始工具</button>
+          <button class="btn btn-primary" @click="screen = 'levels'">选择关卡</button>
+          <button v-if="saveSlots.some(slot => slot !== null)" class="btn btn-primary" @click="openLoadModal">继续游戏</button>
+          <button class="btn btn-secondary" @click="showProfileModal = true">切换档案</button>
           <button class="btn btn-secondary" @click="showHelp = true">工具说明</button>
           <button class="btn btn-secondary" @click="goBack">返回首页</button>
         </view>
@@ -22,10 +30,41 @@
       </view>
     </view>
 
+    <!-- 关卡选择界面 -->
+    <view v-if="screen === 'levels'" class="screen levels-screen">
+      <view class="levels-content">
+        <text class="screen-title">选择关卡</text>
+        <view class="levels-grid">
+          <view
+            v-for="level in LEVELS"
+            :key="level.id"
+            class="level-card"
+            :class="{ locked: !isLevelUnlocked(level.id, levelProgress) }"
+            @click="selectLevel(level)"
+          >
+            <text class="level-emoji">{{ level.emoji }}</text>
+            <text class="level-name">{{ level.name }}</text>
+            <view v-if="!isLevelUnlocked(level.id, levelProgress)" class="lock-icon">🔒</view>
+            <view v-else-if="levelProgress[level.id]" class="level-stars">
+              <text
+                v-for="i in 3"
+                :key="i"
+                class="mini-star"
+              >
+                {{ i <= (levelProgress[level.id].bestStars || 0) ? '⭐' : '☆' }}
+              </text>
+            </view>
+            <text class="level-waves">{{ level.totalWaves }} 波</text>
+          </view>
+        </view>
+        <button class="btn btn-secondary back-btn" @click="screen = 'menu'">返回</button>
+      </view>
+    </view>
+
     <!-- 工具界面 -->
     <view v-if="screen === 'game'" class="screen game-screen">
       <!-- 顶部信息栏 -->
-      <view class="game-header safe-area-top">
+      <view class="game-header safe-area-top" :style="headerStyle">
         <view class="info-left">
           <text class="lives">❤️ {{ gameState.lives }}</text>
           <text class="gold">💰 {{ gameState.gold }}</text>
@@ -34,6 +73,7 @@
           <text class="wave">第 {{ gameState.wave }} 波</text>
         </view>
         <view class="info-right">
+          <text class="btn-icon" @click="toggleSound">{{ soundEnabled ? '🔊' : '🔇' }}</text>
           <text class="btn-icon" @click="pauseGame">⏸️</text>
           <text class="btn-icon" @click="toggleSpeed">{{ gameState.gameSpeed === 1 ? '⏩' : '⏩⏩' }}</text>
         </view>
@@ -46,7 +86,8 @@
       </view>
 
       <!-- 工具画布 -->
-      <view class="canvas-wrapper" id="canvasWrapper">
+      <view class="canvas-wrapper" id="canvasWrapper" :style="canvasWrapperStyle">
+        <!-- #ifdef H5 -->
         <canvas
           id="gameCanvas"
           type="2d"
@@ -54,30 +95,68 @@
           :style="canvasStyle"
           @touchstart.stop.prevent="handleTouch"
         ></canvas>
+        <!-- #endif -->
+        <!-- #ifdef MP-WEIXIN -->
+        <canvas
+          canvas-id="gameCanvas"
+          id="gameCanvas"
+          class="game-canvas"
+          :style="canvasStyle"
+          @touchstart.stop.prevent="handleTouch"
+        ></canvas>
+        <!-- #endif -->
       </view>
 
-      <!-- 提示信息 -->
-      <view v-if="!selectedTower" class="tip-bar">
-        <text class="tip-text">👇 选择下方防御塔，点击绿色区域建造</text>
-      </view>
-      <view v-else class="tip-bar selected-tip">
-        <text class="tip-text">✅ 已选择 {{ getTowerName(selectedTower) }}，点击绿色区域建造</text>
+      <!-- 选中塔信息栏 -->
+      <view v-if="selectedTower" class="selected-tower-bar">
+        <view class="selected-tower-info">
+          <text class="selected-tower-emoji">{{ getTowerEmoji(selectedTower) }}</text>
+          <view class="selected-tower-detail">
+            <text class="selected-tower-name">{{ getTowerName(selectedTower) }}</text>
+            <text class="selected-tower-desc">{{ getTowerDesc(selectedTower) }}</text>
+          </view>
+        </view>
+        <text class="selected-tower-hint">点击绿色区域建造</text>
+        <text class="cancel-select" @click="cancelSelect">✕</text>
       </view>
 
-      <!-- 底部塔选择栏 -->
-      <view class="tower-bar safe-area-bottom">
-        <view
-          v-for="tower in towerList"
-          :key="tower.type"
-          class="tower-slot"
-          :class="{ selected: selectedTower === tower.type, disabled: gameState.gold < tower.cost }"
-          @click="selectTower(tower.type)"
-        >
-          <text class="tower-icon">{{ tower.emoji }}</text>
-          <text class="tower-name">{{ tower.name }}</text>
-          <text class="tower-cost">💰{{ tower.cost }}</text>
+      <!-- 塔操作菜单 -->
+      <view v-if="showTowerMenu" class="tower-menu-overlay" @click="closeTowerMenu">
+        <view class="tower-menu" :style="towerMenuStyle" @click.stop>
+          <view class="tower-menu-header">
+            <text class="tower-menu-name">{{ towerMenuInfo.tower?.baseConfig?.emoji }} {{ towerMenuInfo.tower?.baseConfig?.name }} Lv{{ towerMenuInfo.tower?.level }}</text>
+          </view>
+          <view class="tower-menu-actions">
+            <view class="tower-action upgrade-action" @click="upgradeTowerFromMenu">
+              <text class="action-icon">⬆️</text>
+              <text class="action-label">升级</text>
+              <text class="action-cost">💰{{ towerMenuInfo.upgradeCost }}</text>
+            </view>
+            <view class="tower-action sell-action" @click="sellTowerFromMenu">
+              <text class="action-icon">🗑️</text>
+              <text class="action-label">拆除</text>
+              <text class="action-price">+💰{{ towerMenuInfo.sellPrice }}</text>
+            </view>
+          </view>
         </view>
       </view>
+
+      <!-- 底部塔选择栏 - 横向滚动 -->
+      <scroll-view class="tower-bar safe-area-bottom" scroll-x :show-scrollbar="false">
+        <view class="tower-bar-inner">
+          <view
+            v-for="tower in towerList"
+            :key="tower.type"
+            class="tower-slot"
+            :class="{ selected: selectedTower === tower.type, disabled: gameState.gold < tower.cost }"
+            @click="selectTower(tower.type)"
+          >
+            <text class="tower-icon">{{ tower.emoji }}</text>
+            <text class="tower-name">{{ tower.name }}</text>
+            <text class="tower-cost">💰{{ tower.cost }}</text>
+          </view>
+        </view>
+      </scroll-view>
     </view>
 
     <!-- 数学题弹窗 -->
@@ -126,6 +205,7 @@
         <text class="modal-title">工具暂停</text>
         <view class="modal-buttons">
           <button class="btn btn-primary" @click="resumeGame">继续工具</button>
+          <button class="btn btn-secondary" @click="openSaveModal">保存游戏</button>
           <button class="btn btn-secondary" @click="restartGame">重新开始</button>
           <button class="btn btn-secondary" @click="quitGame">返回菜单</button>
         </view>
@@ -232,6 +312,95 @@
         <button class="btn btn-primary" @click="showHelp = false">知道了</button>
       </view>
     </view>
+
+    <!-- 档案管理弹窗 -->
+    <view v-if="showProfileModal" class="modal">
+      <view class="modal-content profile-modal">
+        <text class="modal-title">档案管理</text>
+        <view class="profile-list">
+          <view
+            v-for="profile in profileList"
+            :key="profile.id"
+            class="profile-item"
+            :class="{ active: currentUser && currentUser.id === profile.id }"
+          >
+            <view class="profile-info" @click="switchProfile(profile)">
+              <text class="profile-avatar-small">{{ profile.avatar || '👤' }}</text>
+              <text class="profile-name-small">{{ profile.name }}</text>
+            </view>
+            <text class="delete-btn" @click="deleteProfile(profile.id)">🗑️</text>
+          </view>
+        </view>
+        <view class="new-profile-form">
+          <input
+            v-model="newProfileName"
+            type="text"
+            class="profile-input"
+            placeholder="输入新档案名称"
+            @confirm="createProfile"
+          />
+          <button class="btn btn-primary" @click="createProfile">创建档案</button>
+        </view>
+        <button class="btn btn-secondary" @click="showProfileModal = false">关闭</button>
+      </view>
+    </view>
+
+    <!-- 保存游戏弹窗 -->
+    <view v-if="showSaveModal" class="modal">
+      <view class="modal-content save-modal">
+        <text class="modal-title">保存游戏</text>
+        <view class="save-slots">
+          <view
+            v-for="(slot, index) in [1, 2, 3]"
+            :key="index"
+            class="save-slot"
+            @click="saveToSlot(slot)"
+          >
+            <text class="slot-number">存档 {{ slot }}</text>
+            <view v-if="saveSlots[slot]" class="slot-info">
+              <text class="slot-level">{{ saveSlots[slot].levelName }}</text>
+              <text class="slot-wave">第 {{ saveSlots[slot].wave }} 波</text>
+              <text class="slot-time">{{ saveSlots[slot].saveTime }}</text>
+            </view>
+            <text v-else class="slot-empty">空</text>
+          </view>
+        </view>
+        <button class="btn btn-secondary" @click="showSaveModal = false">取消</button>
+      </view>
+    </view>
+
+    <!-- 加载游戏弹窗 -->
+    <view v-if="showLoadModal" class="modal">
+      <view class="modal-content load-modal">
+        <text class="modal-title">加载游戏</text>
+        <view class="save-slots">
+          <view
+            v-for="(slot, index) in [0, 1, 2, 3]"
+            :key="index"
+            class="save-slot"
+            :class="{ disabled: !saveSlots[slot] }"
+            @click="loadFromSlot(slot)"
+          >
+            <text class="slot-number">{{ slot === 0 ? '自动存档' : `存档 ${slot}` }}</text>
+            <view v-if="saveSlots[slot]" class="slot-info">
+              <text class="slot-level">{{ saveSlots[slot].levelName }}</text>
+              <text class="slot-wave">第 {{ saveSlots[slot].wave }} 波</text>
+              <text class="slot-time">{{ saveSlots[slot].saveTime }}</text>
+            </view>
+            <text v-else class="slot-empty">空</text>
+          </view>
+        </view>
+        <button class="btn btn-secondary" @click="showLoadModal = false">取消</button>
+      </view>
+    </view>
+
+    <!-- 隐藏的海报画布（用于分享图片） -->
+    <!-- #ifdef MP-WEIXIN -->
+    <canvas canvas-id="posterCanvas" class="poster-canvas"></canvas>
+    <!-- #endif -->
+    <!-- #ifdef H5 -->
+    <canvas id="posterCanvas" type="2d" class="poster-canvas"></canvas>
+    <!-- #endif -->
   </view>
 </template>
 
@@ -239,6 +408,9 @@
 import { Game, TOWER_LIST } from '@/game/tower-defense/index.js'
 import { CanvasAdapter } from '@/utils/canvas-adapter.js'
 import { generateRandomQuestion, generateOptions, checkAnswer } from '@/utils/math.js'
+import { storageManager } from '@/utils/storage-manager'
+import { LEVELS, getLevelConfig, isLevelUnlocked } from '@/game/tower-defense/config/levels.js'
+import { soundManager } from '@/utils/sound-manager'
 
 export default {
   data() {
@@ -248,6 +420,23 @@ export default {
       showMathModal: false,
       showPauseModal: false,
       showGameOverModal: false,
+      showTowerMenu: false,
+
+      // 用户档案
+      currentUser: null,
+      showProfileModal: false,
+      newProfileName: '',
+      profileList: [],
+
+      // 关卡系统
+      LEVELS: LEVELS,
+      selectedLevel: null,
+      levelProgress: {},
+
+      // 存档系统
+      showSaveModal: false,
+      showLoadModal: false,
+      saveSlots: [null, null, null, null],
 
       // 工具实例
       game: null,
@@ -279,6 +468,10 @@ export default {
       canvasWidth: 320,
       canvasHeight: 400,
 
+      // 安全区域和胶囊按钮
+      statusBarHeight: 0,
+      capsuleInfo: { top: 0, height: 0, right: 0 },
+
       // 数学题相关
       currentQuestion: null,
       userAnswer: '',
@@ -304,8 +497,19 @@ export default {
         encouragement: ''
       },
 
+      // 塔菜单
+      towerMenuInfo: {
+        tower: null,
+        upgradeCost: 0,
+        sellPrice: 0
+      },
+      towerMenuPosition: { x: 0, y: 0 },
+
       // 随机出题定时器
-      randomQuestionTimer: null
+      randomQuestionTimer: null,
+
+      // 音效开关
+      soundEnabled: true
     }
   },
 
@@ -315,6 +519,52 @@ export default {
         width: this.canvasWidth + 'px',
         height: this.canvasHeight + 'px'
       }
+    },
+    anyModalOpen() {
+      return this.showMathModal || this.showPauseModal || this.showGameOverModal || this.showTowerMenu
+    },
+    towerMenuStyle() {
+      const { x, y } = this.towerMenuPosition
+      const menuWidth = 280
+      const menuHeight = 160
+      const screenWidth = this.canvasWidth
+      const screenHeight = this.canvasHeight
+
+      // 确保菜单在屏幕范围内
+      let left = x
+      let top = y
+
+      if (left + menuWidth > screenWidth) {
+        left = screenWidth - menuWidth - 20
+      }
+      if (left < 20) {
+        left = 20
+      }
+      if (top + menuHeight > screenHeight) {
+        top = screenHeight - menuHeight - 20
+      }
+      if (top < 20) {
+        top = 20
+      }
+
+      return {
+        left: left + 'px',
+        top: top + 'px'
+      }
+    },
+    canvasWrapperStyle() {
+      if (this.anyModalOpen) {
+        return { position: 'absolute', left: '-9999px' }
+      }
+      return {}
+    },
+    headerStyle() {
+      const style = { paddingTop: this.statusBarHeight + 'px' }
+      if (this.capsuleInfo.height > 0) {
+        style.height = (this.capsuleInfo.top + this.capsuleInfo.height + 8) + 'px'
+        style.paddingRight = (this.capsuleInfo.right + 8) + 'px'
+      }
+      return style
     }
   },
 
@@ -330,12 +580,265 @@ export default {
       return tower ? tower.name : ''
     },
 
+    getTowerEmoji(type) {
+      const tower = this.towerList.find(t => t.type === type)
+      return tower ? tower.emoji : ''
+    },
+
+    getTowerDesc(type) {
+      const tower = this.towerList.find(t => t.type === type)
+      return tower ? tower.description : ''
+    },
+
+    cancelSelect() {
+      this.selectedTower = null
+      if (this.game) {
+        this.game.selectedTower = null
+        this.game.events.emit('towerSelected', { type: null })
+      }
+    },
+
+    // 档案管理方法
+    loadProfile() {
+      // 加载当前用户
+      const userId = storageManager.getCurrentUser()
+      const users = storageManager.getUserList()
+      this.profileList = users
+
+      if (userId && users.length > 0) {
+        this.currentUser = users.find(u => u.id === userId) || users[0]
+        if (!this.currentUser.id) {
+          this.currentUser = users[0]
+          storageManager.setCurrentUser(this.currentUser.id)
+        }
+      } else if (users.length > 0) {
+        this.currentUser = users[0]
+        storageManager.setCurrentUser(this.currentUser.id)
+      } else {
+        // 没有用户，显示档案创建弹窗
+        this.showProfileModal = true
+      }
+
+      if (this.currentUser) {
+        this.loadLevelProgress()
+        this.refreshSaveSlots()
+      }
+    },
+
+    createProfile() {
+      if (!this.newProfileName.trim()) {
+        uni.showToast({ title: '请输入档案名称', icon: 'none' })
+        return
+      }
+
+      const newUser = storageManager.addUser({ name: this.newProfileName.trim() })
+      this.profileList = storageManager.getUserList()
+      this.switchProfile(newUser)
+      this.newProfileName = ''
+      this.showProfileModal = false
+      uni.showToast({ title: '档案创建成功', icon: 'success' })
+    },
+
+    switchProfile(user) {
+      this.currentUser = user
+      storageManager.setCurrentUser(user.id)
+      this.loadLevelProgress()
+      this.refreshSaveSlots()
+      this.showProfileModal = false
+      uni.showToast({ title: `切换到 ${user.name}`, icon: 'success' })
+    },
+
+    deleteProfile(userId) {
+      if (this.profileList.length <= 1) {
+        uni.showToast({ title: '至少保留一个档案', icon: 'none' })
+        return
+      }
+
+      uni.showModal({
+        title: '确认删除',
+        content: '删除档案将清除所有进度，确定删除吗？',
+        success: (res) => {
+          if (res.confirm) {
+            storageManager.deleteUser(userId)
+            this.profileList = storageManager.getUserList()
+            if (this.currentUser && this.currentUser.id === userId) {
+              this.switchProfile(this.profileList[0])
+            }
+            uni.showToast({ title: '档案已删除', icon: 'success' })
+          }
+        }
+      })
+    },
+
+    // 关卡进度管理
+    loadLevelProgress() {
+      if (!this.currentUser) return
+      this.levelProgress = storageManager.loadData('progress', {})
+    },
+
+    saveLevelProgress(levelId, result) {
+      if (!this.currentUser) return
+
+      const progress = this.levelProgress[levelId] || {}
+
+      // 更新最佳成绩
+      if (!progress.bestStars || result.stars > progress.bestStars) {
+        progress.bestStars = result.stars
+      }
+      if (!progress.bestWave || result.wave > progress.bestWave) {
+        progress.bestWave = result.wave
+      }
+      if (!progress.bestScore || result.score > progress.bestScore) {
+        progress.bestScore = result.score
+      }
+      if (result.win) {
+        progress.completed = true
+      }
+
+      this.levelProgress[levelId] = progress
+      storageManager.saveData('progress', this.levelProgress)
+    },
+
+    isLevelUnlocked(levelId, progressData) {
+      return isLevelUnlocked(levelId, progressData || this.levelProgress)
+    },
+
+    // 关卡选择
+    selectLevel(level) {
+      if (!this.isLevelUnlocked(level.id, this.levelProgress)) {
+        uni.showToast({ title: '关卡未解锁', icon: 'none' })
+        return
+      }
+
+      soundManager.init()
+      soundManager.click()
+      this.selectedLevel = level
+      this.startGame()
+    },
+
+    toggleSound() {
+      this.soundEnabled = !this.soundEnabled
+      soundManager.setEnabled(this.soundEnabled)
+      soundManager.toggle(this.soundEnabled)
+    },
+
+    // 存档管理
+    refreshSaveSlots() {
+      if (!this.currentUser) return
+      // 从存储加载存档信息（saves 是按槽位存储的对象）
+      const saves = storageManager.loadData('saves', {})
+      const slots = [null, null, null, null]
+      for (let i = 0; i <= 3; i++) {
+        const save = saves[i]
+        if (save) {
+          const levelConfig = save.levelId ? getLevelConfig(save.levelId) : null
+          slots[i] = {
+            levelName: levelConfig ? levelConfig.name : '自由模式',
+            wave: save.state ? save.state.wave : 0,
+            saveTime: this.formatTime(save.timestamp)
+          }
+        }
+      }
+      this.saveSlots = slots
+    },
+
+    formatTime(timestamp) {
+      if (!timestamp) return ''
+      const date = new Date(timestamp)
+      return `${date.getMonth() + 1}/${date.getDate()} ${date.getHours()}:${String(date.getMinutes()).padStart(2, '0')}`
+    },
+
+    openSaveModal() {
+      this.refreshSaveSlots()
+      this.showSaveModal = true
+      this.showPauseModal = false
+    },
+
+    openLoadModal() {
+      this.refreshSaveSlots()
+      this.showLoadModal = true
+    },
+
+    saveToSlot(slot) {
+      if (!this.game) return
+
+      try {
+        this.game.saveGame(slot)
+        this.refreshSaveSlots()
+        this.showSaveModal = false
+        uni.showToast({ title: `已保存到存档 ${slot}`, icon: 'success' })
+      } catch (error) {
+        console.error('Save failed:', error)
+        uni.showToast({ title: '保存失败', icon: 'none' })
+      }
+    },
+
+    loadFromSlot(slot) {
+      if (!this.saveSlots[slot]) {
+        uni.showToast({ title: '存档为空', icon: 'none' })
+        return
+      }
+
+      try {
+        const saves = storageManager.loadData('saves', {})
+        const saveData = saves[slot]
+
+        if (!saveData) {
+          uni.showToast({ title: '存档不存在', icon: 'none' })
+          return
+        }
+
+        // 设置选中的关卡
+        if (saveData.levelId) {
+          this.selectedLevel = getLevelConfig(saveData.levelId)
+        } else {
+          this.selectedLevel = null
+        }
+
+        // 关闭加载弹窗
+        this.showLoadModal = false
+
+        // 启动游戏并加载存档
+        this.startGameAndLoad(saveData)
+        uni.showToast({ title: '存档加载成功', icon: 'success' })
+      } catch (error) {
+        console.error('Load failed:', error)
+        uni.showToast({ title: '加载失败', icon: 'none' })
+      }
+    },
+
+    async startGameAndLoad(saveData) {
+      // 先启动游戏
+      await this.startGame()
+
+      // 等待游戏初始化完成后加载存档
+      setTimeout(() => {
+        if (this.game && this.game.saveSystem) {
+          this.game.loadGame(saveData)
+        }
+      }, 200)
+    },
+
     async startGame() {
-      // 先计算画布尺寸，再切换屏幕，避免使用默认尺寸渲染
       const sysInfo = uni.getSystemInfoSync()
       const screenWidth = sysInfo.windowWidth
       const screenHeight = sysInfo.windowHeight
+
+      this.statusBarHeight = sysInfo.statusBarHeight || 0
+
+      // #ifdef MP-WEIXIN
+      const menuBtn = wx.getMenuButtonBoundingClientRect()
+      this.capsuleInfo = {
+        top: menuBtn.top,
+        height: menuBtn.height,
+        right: screenWidth - menuBtn.left
+      }
+      const headerHeight = menuBtn.top + menuBtn.height + 8
+      // #endif
+      // #ifndef MP-WEIXIN
       const headerHeight = 50
+      // #endif
+
       const tipHeight = 40
       const towerBarHeight = 90
       const safeBottom = sysInfo.safeAreaInsets?.bottom || 0
@@ -343,7 +846,6 @@ export default {
       this.canvasWidth = screenWidth
       this.canvasHeight = screenHeight - headerHeight - tipHeight - towerBarHeight - safeBottom - 20
 
-      // 现在切换到游戏屏幕，Canvas 会使用正确的尺寸渲染
       this.screen = 'game'
       await this.$nextTick()
       setTimeout(() => this.initGame(), 100)
@@ -364,8 +866,12 @@ export default {
           height: this.canvasHeight
         })
 
-        // 创建工具实例
-        this.game = new Game(this.canvasAdapter)
+        // 创建工具实例，传入关卡配置
+        const gameConfig = {}
+        if (this.selectedLevel) {
+          gameConfig.levelConfig = this.selectedLevel
+        }
+        this.game = new Game(this.canvasAdapter, gameConfig)
 
         // 监听工具事件
         this.setupGameEvents()
@@ -376,6 +882,9 @@ export default {
 
         // 启动随机出题定时器
         this.startRandomQuestionTimer()
+
+        // 刷新存档槽位信息
+        this.refreshSaveSlots()
       } catch (error) {
         console.error('Game init failed:', error)
         setTimeout(() => this.initGame(), 200)
@@ -390,6 +899,7 @@ export default {
 
       // 塔选择
       this.game.events.on('towerSelected', ({ type }) => {
+        if (type) soundManager.click()
         this.selectedTower = type
       })
 
@@ -398,9 +908,48 @@ export default {
         this.comboInfo = { ...info }
       })
 
+      // 连击里程碑
+      this.game.events.on('showComboMilestone', () => {
+        soundManager.combo()
+      })
+
       // 需要数学题
       this.game.events.on('needMathQuestion', ({ difficulty, callback }) => {
         this.showMathQuestion(difficulty, callback)
+      })
+
+      // 显示塔菜单
+      this.game.events.on('showTowerMenu', ({ tower, upgradeCost, sellPrice }) => {
+        soundManager.click()
+        this.towerMenuInfo = { tower, upgradeCost, sellPrice }
+
+        const headerHeight = this.capsuleInfo.height > 0
+          ? this.capsuleInfo.top + this.capsuleInfo.height + 8
+          : 50
+        const tipHeight = 40
+
+        this.towerMenuPosition = {
+          x: tower.x + 20,
+          y: tower.y + headerHeight + tipHeight - 40
+        }
+
+        this.showTowerMenu = true
+        this.game.pause()
+      })
+
+      // 波次开始
+      this.game.events.on('waveStart', () => {
+        soundManager.waveStart()
+      })
+
+      // 建造塔
+      this.game.events.on('towerBuilt', () => {
+        soundManager.build()
+      })
+
+      // 升级塔
+      this.game.events.on('towerUpgraded', () => {
+        soundManager.upgrade()
       })
 
       // Toast 提示
@@ -408,14 +957,40 @@ export default {
         uni.showToast({ title, icon, duration: 1000 })
       })
 
+      // 怪物死亡
+      this.game.events.on('enemyDied', () => {
+        soundManager.enemyKill()
+      })
+
+      // 怪物到达终点
+      this.game.events.on('enemyReachedEnd', () => {
+        soundManager.enemyLeak()
+      })
+
+      // 金币矿场产金
+      this.game.events.on('goldProduced', () => {
+        soundManager.gold()
+      })
+
       // 工具结束
       this.game.events.on('gameover', (result) => {
         this.gameResult = result
         this.showGameOverModal = true
+        if (result.win) {
+          soundManager.victory()
+        } else {
+          soundManager.defeat()
+        }
+
+        // 保存关卡进度
+        if (result.levelId) {
+          this.saveLevelProgress(result.levelId, result)
+        }
       })
 
       // 成就解锁
       this.game.events.on('achievementUnlocked', (achievement) => {
+        soundManager.achievement()
         uni.showToast({
           title: `🏆 解锁: ${achievement.name}`,
           icon: 'none',
@@ -432,6 +1007,28 @@ export default {
 
       const { x, y } = this.canvasAdapter.touchToLogic(touch, e)
       this.game.handleTouch(x, y)
+    },
+
+    closeTowerMenu() {
+      this.showTowerMenu = false
+      if (this.game) {
+        this.game.resume()
+      }
+    },
+
+    upgradeTowerFromMenu() {
+      if (this.game && this.towerMenuInfo.tower) {
+        this.closeTowerMenu()
+        this.game.tryUpgradeTower(this.towerMenuInfo.tower)
+      }
+    },
+
+    sellTowerFromMenu() {
+      soundManager.sell()
+      if (this.game && this.towerMenuInfo.tower) {
+        this.closeTowerMenu()
+        this.game.sellTower(this.towerMenuInfo.tower)
+      }
     },
 
     selectTower(type) {
@@ -486,9 +1083,11 @@ export default {
       if (isCorrect) {
         this.feedback = '✓ 回答正确！'
         this.feedbackClass = 'correct'
+        soundManager.correct()
       } else {
         this.feedback = `✗ 答案是 ${this.currentQuestion.answer}`
         this.feedbackClass = 'wrong'
+        soundManager.wrong()
       }
 
       setTimeout(() => {
@@ -599,23 +1198,187 @@ export default {
         this.game.destroy()
         this.game = null
       }
+      this.selectedLevel = null
       this.screen = 'menu'
     },
 
     shareResult() {
-      const text = `🏰 我在【数学塔防】中坚守了 ${this.gameResult.wave} 波！答题正确率 ${this.gameResult.accuracy}%！最高连击 ${this.gameResult.maxCombo}！快来挑战吧！`
-
       // #ifdef H5
+      this.shareResultH5()
+      // #endif
+
+      // #ifdef MP-WEIXIN
+      this.shareResultWx()
+      // #endif
+    },
+
+    shareResultH5() {
+      const text = `🏰 我在【数学塔防】中坚守了 ${this.gameResult.wave} 波！答题正确率 ${this.gameResult.accuracy}%！最高连击 ${this.gameResult.maxCombo}！快来挑战吧！`
       if (navigator.clipboard) {
         navigator.clipboard.writeText(text)
         uni.showToast({ title: '已复制，快去分享吧', icon: 'none' })
       }
-      // #endif
+    },
 
-      // #ifdef MP-WEIXIN
-      uni.showToast({ title: '长按保存并分享', icon: 'none' })
-      // #endif
+    shareResultWx() {
+      uni.showLoading({ title: '生成海报...' })
+
+      const w = 600
+      const h = 900
+      const ctx = uni.createCanvasContext('posterCanvas', this)
+
+      // 背景渐变
+      const grd = ctx.createLinearGradient(0, 0, 0, h)
+      grd.addColorStop(0, '#1a1a2e')
+      grd.addColorStop(1, '#16213e')
+      ctx.setFillStyle(grd)
+      ctx.fillRect(0, 0, w, h)
+
+      // 标题
+      ctx.setFillStyle('#ffffff')
+      ctx.setFontSize(40)
+      ctx.setTextAlign('center')
+      ctx.fillText('🏰 数学塔防', w / 2, 80)
+
+      // 结果
+      ctx.setFontSize(32)
+      ctx.setFillStyle(this.gameResult.win ? '#4CAF50' : '#FF9800')
+      ctx.fillText(this.gameResult.win ? '🎉 胜利！' : '💪 挑战结束', w / 2, 140)
+
+      // 星级
+      const stars = this.gameResult.stars || 0
+      let starText = ''
+      for (let i = 1; i <= 3; i++) {
+        starText += i <= stars ? '⭐' : '☆'
+      }
+      ctx.setFontSize(44)
+      ctx.setFillStyle('#FFD700')
+      ctx.fillText(starText, w / 2, 210)
+
+      // 分隔线
+      ctx.setStrokeStyle('rgba(255,255,255,0.15)')
+      ctx.setLineWidth(1)
+      ctx.beginPath()
+      ctx.moveTo(60, 250)
+      ctx.lineTo(w - 60, 250)
+      ctx.stroke()
+
+      // 数据卡片背景
+      ctx.setFillStyle('rgba(0,0,0,0.3)')
+      this._roundRect(ctx, 40, 280, w - 80, 320, 20)
+      ctx.fill()
+
+      // 数据展示 - 2x2网格
+      const dataItems = [
+        { label: '波数', value: this.gameResult.wave, color: '#4CAF50' },
+        { label: '正确率', value: this.gameResult.accuracy + '%', color: '#2196F3' },
+        { label: '最高连击', value: this.gameResult.maxCombo, color: '#FF9800' },
+        { label: '得分', value: this.gameResult.score || 0, color: '#E040FB' }
+      ]
+
+      const colW = (w - 80) / 2
+      const startX = 40
+      const startY = 320
+      dataItems.forEach((item, i) => {
+        const col = i % 2
+        const row = Math.floor(i / 2)
+        const cx = startX + colW * col + colW / 2
+        const cy = startY + row * 150
+
+        ctx.setFillStyle(item.color)
+        ctx.setFontSize(48)
+        ctx.setTextAlign('center')
+        ctx.fillText(String(item.value), cx, cy)
+
+        ctx.setFillStyle('rgba(255,255,255,0.6)')
+        ctx.setFontSize(24)
+        ctx.fillText(item.label, cx, cy + 40)
+      })
+
+      // 激励语
+      ctx.setFillStyle('rgba(76,175,80,0.2)')
+      this._roundRect(ctx, 40, 640, w - 80, 70, 16)
+      ctx.fill()
+
+      ctx.setFillStyle('#4CAF50')
+      ctx.setFontSize(24)
+      ctx.setTextAlign('center')
+      ctx.fillText(this.gameResult.encouragement || '继续加油！', w / 2, 685)
+
+      // 底部
+      ctx.setFillStyle('rgba(255,255,255,0.3)')
+      ctx.setFontSize(20)
+      ctx.fillText('— 数学塔防 · 边玩边学 —', w / 2, 780)
+
+      ctx.setFillStyle('rgba(255,255,255,0.2)')
+      ctx.setFontSize(18)
+      const userName = this.currentUser ? this.currentUser.name : ''
+      if (userName) {
+        ctx.fillText(`玩家: ${userName}`, w / 2, 820)
+      }
+
+      // 绘制完成后导出图片
+      ctx.draw(false, () => {
+        setTimeout(() => {
+          uni.canvasToTempFilePath({
+            canvasId: 'posterCanvas',
+            width: w,
+            height: h,
+            destWidth: w * 2,
+            destHeight: h * 2,
+            success: (res) => {
+              uni.hideLoading()
+              // 保存到相册
+              uni.saveImageToPhotosAlbum({
+                filePath: res.tempFilePath,
+                success: () => {
+                  uni.showToast({ title: '已保存到相册', icon: 'success' })
+                },
+                fail: (err) => {
+                  if (err.errMsg && err.errMsg.includes('auth deny')) {
+                    uni.showModal({
+                      title: '提示',
+                      content: '需要授权保存图片到相册',
+                      success: (modalRes) => {
+                        if (modalRes.confirm) {
+                          uni.openSetting()
+                        }
+                      }
+                    })
+                  } else {
+                    // 预览图片作为备选
+                    uni.previewImage({ urls: [res.tempFilePath] })
+                  }
+                }
+              })
+            },
+            fail: () => {
+              uni.hideLoading()
+              uni.showToast({ title: '生成图片失败', icon: 'none' })
+            }
+          }, this)
+        }, 300)
+      })
+    },
+
+    _roundRect(ctx, x, y, w, h, r) {
+      ctx.beginPath()
+      ctx.moveTo(x + r, y)
+      ctx.lineTo(x + w - r, y)
+      ctx.arcTo(x + w, y, x + w, y + r, r)
+      ctx.lineTo(x + w, y + h - r)
+      ctx.arcTo(x + w, y + h, x + w - r, y + h, r)
+      ctx.lineTo(x + r, y + h)
+      ctx.arcTo(x, y + h, x, y + h - r, r)
+      ctx.lineTo(x, y + r)
+      ctx.arcTo(x, y, x + r, y, r)
+      ctx.closePath()
     }
+  },
+
+  onLoad() {
+    // 加载用户档案
+    this.loadProfile()
   },
 
   onHide() {
@@ -634,7 +1397,28 @@ export default {
       this.game.destroy()
       this.game = null
     }
+  },
+
+  // #ifdef MP-WEIXIN
+  onShareAppMessage() {
+    const result = this.gameResult
+    if (this.showGameOverModal && result) {
+      return {
+        title: `🏰 我在数学塔防坚守了${result.wave}波！正确率${result.accuracy}%！`,
+        path: '/pages/tower-defense/index'
+      }
+    }
+    return {
+      title: '🏰 数学塔防 - 答题建塔，守护基地！',
+      path: '/pages/tower-defense/index'
+    }
+  },
+  onShareTimeline() {
+    return {
+      title: '🏰 数学塔防 - 边玩边学，快来挑战！'
+    }
   }
+  // #endif
 }
 </script>
 
@@ -671,6 +1455,27 @@ export default {
 .menu-content {
   text-align: center;
   padding: 40rpx;
+}
+
+.profile-display {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 32rpx;
+  padding: 24rpx;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 24rpx;
+}
+
+.profile-avatar {
+  font-size: 64rpx;
+  margin-bottom: 12rpx;
+}
+
+.profile-name {
+  font-size: 32rpx;
+  color: #ffffff;
+  font-weight: bold;
 }
 
 .title {
@@ -806,52 +1611,85 @@ export default {
   background: #2d5016;
 }
 
-.tip-bar {
-  padding: 12rpx 24rpx;
-  background: rgba(0, 0, 0, 0.5);
-  min-height: 40px;
+/* 选中塔信息栏 */
+.selected-tower-bar {
   display: flex;
   align-items: center;
-  justify-content: center;
+  padding: 12rpx 24rpx;
+  background: rgba(76, 175, 80, 0.25);
+  border-top: 2rpx solid rgba(76, 175, 80, 0.4);
 }
 
-.tip-bar.selected-tip {
-  background: rgba(76, 175, 80, 0.3);
-}
-
-.tip-text {
-  font-size: 24rpx;
-  color: #a0a0a0;
-}
-
-.selected-tip .tip-text {
-  color: #4CAF50;
-}
-
-.tower-bar {
+.selected-tower-info {
   display: flex;
-  justify-content: space-around;
-  padding: 12rpx 8rpx;
-  background: rgba(0, 0, 0, 0.8);
-  min-height: 90px;
+  align-items: center;
+  flex: 1;
+  gap: 16rpx;
+}
+
+.selected-tower-emoji {
+  font-size: 40rpx;
+}
+
+.selected-tower-detail {
+  display: flex;
+  flex-direction: column;
+}
+
+.selected-tower-name {
+  font-size: 26rpx;
+  color: #ffffff;
+  font-weight: bold;
+}
+
+.selected-tower-desc {
+  font-size: 22rpx;
+  color: #a0c8a0;
+}
+
+.selected-tower-hint {
+  font-size: 22rpx;
+  color: #4CAF50;
+  margin-right: 16rpx;
+}
+
+.cancel-select {
+  font-size: 32rpx;
+  color: rgba(255, 255, 255, 0.6);
+  padding: 12rpx;
+}
+
+/* 底部塔选择栏 */
+.tower-bar {
+  background: rgba(0, 0, 0, 0.85);
+  white-space: nowrap;
+  height: 90px;
+}
+
+.tower-bar-inner {
+  display: inline-flex;
+  gap: 12rpx;
+  padding: 12rpx 16rpx;
+  padding-bottom: constant(safe-area-inset-bottom);
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 .tower-slot {
-  display: flex;
+  display: inline-flex;
   flex-direction: column;
   align-items: center;
-  padding: 12rpx 16rpx;
+  padding: 14rpx 20rpx;
   background: #16213e;
   border-radius: 16rpx;
   border: 3rpx solid transparent;
-  min-width: 140rpx;
+  min-width: 130rpx;
   transition: all 0.2s;
 }
 
 .tower-slot.selected {
   border-color: #4CAF50;
-  background: rgba(76, 175, 80, 0.2);
-  transform: scale(1.05);
+  background: rgba(76, 175, 80, 0.25);
+  box-shadow: 0 0 12rpx rgba(76, 175, 80, 0.4);
 }
 
 .tower-slot.disabled {
@@ -859,17 +1697,17 @@ export default {
 }
 
 .tower-icon {
-  font-size: 40rpx;
+  font-size: 44rpx;
 }
 
 .tower-name {
-  font-size: 20rpx;
+  font-size: 22rpx;
   color: #ffffff;
-  margin-top: 4rpx;
+  margin-top: 6rpx;
 }
 
 .tower-cost {
-  font-size: 20rpx;
+  font-size: 22rpx;
   color: #FFD700;
   margin-top: 4rpx;
 }
@@ -1160,5 +1998,321 @@ export default {
   color: #a0a0a0;
   margin-bottom: 8rpx;
   line-height: 1.6;
+}
+
+/* 关卡选择界面 */
+.levels-screen {
+  justify-content: center;
+  align-items: center;
+}
+
+.levels-content {
+  padding: 40rpx;
+  width: 100%;
+  max-width: 750rpx;
+}
+
+.screen-title {
+  display: block;
+  font-size: 48rpx;
+  font-weight: bold;
+  color: #ffffff;
+  text-align: center;
+  margin-bottom: 40rpx;
+}
+
+.levels-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24rpx;
+  margin-bottom: 40rpx;
+}
+
+.level-card {
+  background: linear-gradient(135deg, rgba(76, 175, 80, 0.2), rgba(33, 150, 243, 0.2));
+  border-radius: 24rpx;
+  padding: 32rpx;
+  text-align: center;
+  position: relative;
+  border: 3rpx solid rgba(255, 255, 255, 0.1);
+  transition: all 0.3s;
+}
+
+.level-card:active {
+  transform: scale(0.95);
+}
+
+.level-card.locked {
+  opacity: 0.4;
+  background: rgba(100, 100, 100, 0.2);
+}
+
+.level-emoji {
+  display: block;
+  font-size: 64rpx;
+  margin-bottom: 16rpx;
+}
+
+.level-name {
+  display: block;
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #ffffff;
+  margin-bottom: 12rpx;
+}
+
+.lock-icon {
+  font-size: 48rpx;
+  margin: 16rpx 0;
+}
+
+.level-stars {
+  display: flex;
+  justify-content: center;
+  gap: 8rpx;
+  margin: 12rpx 0;
+}
+
+.mini-star {
+  font-size: 24rpx;
+}
+
+.level-waves {
+  display: block;
+  font-size: 22rpx;
+  color: #a0a0a0;
+}
+
+.back-btn {
+  width: 100%;
+}
+
+/* 档案管理弹窗 */
+.profile-modal {
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.profile-list {
+  margin-bottom: 32rpx;
+}
+
+.profile-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20rpx;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 16rpx;
+  margin-bottom: 16rpx;
+  border: 2rpx solid transparent;
+}
+
+.profile-item.active {
+  border-color: #4CAF50;
+  background: rgba(76, 175, 80, 0.2);
+}
+
+.profile-info {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  flex: 1;
+}
+
+.profile-avatar-small {
+  font-size: 40rpx;
+}
+
+.profile-name-small {
+  font-size: 28rpx;
+  color: #ffffff;
+}
+
+.delete-btn {
+  font-size: 32rpx;
+  padding: 8rpx;
+  opacity: 0.6;
+}
+
+.new-profile-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+  margin-bottom: 24rpx;
+}
+
+.profile-input {
+  padding: 24rpx;
+  font-size: 28rpx;
+  background: rgba(0, 0, 0, 0.3);
+  border: 2rpx solid rgba(255, 255, 255, 0.2);
+  border-radius: 16rpx;
+  color: #ffffff;
+}
+
+/* 存档管理弹窗 */
+.save-modal, .load-modal {
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.save-slots {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+  margin-bottom: 32rpx;
+}
+
+.save-slot {
+  padding: 24rpx;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 16rpx;
+  border: 2rpx solid rgba(255, 255, 255, 0.1);
+  transition: all 0.2s;
+}
+
+.save-slot:active {
+  transform: scale(0.98);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.save-slot.disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.slot-number {
+  display: block;
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #4CAF50;
+  margin-bottom: 12rpx;
+}
+
+.slot-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.slot-level {
+  font-size: 26rpx;
+  color: #ffffff;
+  font-weight: bold;
+}
+
+.slot-wave {
+  font-size: 24rpx;
+  color: #a0a0a0;
+}
+
+.slot-time {
+  font-size: 22rpx;
+  color: #888;
+}
+
+.slot-empty {
+  font-size: 24rpx;
+  color: #666;
+  text-align: center;
+}
+
+.poster-canvas {
+  position: fixed;
+  left: -9999px;
+  top: -9999px;
+  width: 600px;
+  height: 900px;
+}
+
+/* 塔操作菜单 */
+.tower-menu-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 90;
+}
+
+.tower-menu {
+  position: absolute;
+  background: linear-gradient(135deg, #1a1a2e, #16213e);
+  border-radius: 20rpx;
+  padding: 24rpx;
+  width: 280px;
+  box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.5);
+  border: 2rpx solid rgba(76, 175, 80, 0.3);
+}
+
+.tower-menu-header {
+  margin-bottom: 20rpx;
+  padding-bottom: 16rpx;
+  border-bottom: 2rpx solid rgba(255, 255, 255, 0.1);
+}
+
+.tower-menu-name {
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #ffffff;
+}
+
+.tower-menu-actions {
+  display: flex;
+  gap: 16rpx;
+}
+
+.tower-action {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20rpx 12rpx;
+  border-radius: 16rpx;
+  background: rgba(255, 255, 255, 0.05);
+  border: 2rpx solid rgba(255, 255, 255, 0.1);
+  transition: all 0.2s;
+}
+
+.tower-action:active {
+  transform: scale(0.95);
+}
+
+.upgrade-action {
+  border-color: rgba(76, 175, 80, 0.5);
+  background: rgba(76, 175, 80, 0.15);
+}
+
+.upgrade-action:active {
+  background: rgba(76, 175, 80, 0.25);
+}
+
+.sell-action {
+  border-color: rgba(244, 67, 54, 0.5);
+  background: rgba(244, 67, 54, 0.15);
+}
+
+.sell-action:active {
+  background: rgba(244, 67, 54, 0.25);
+}
+
+.action-icon {
+  font-size: 36rpx;
+  margin-bottom: 8rpx;
+}
+
+.action-label {
+  font-size: 24rpx;
+  color: #ffffff;
+  margin-bottom: 4rpx;
+  font-weight: bold;
+}
+
+.action-cost, .action-price {
+  font-size: 22rpx;
+  color: #FFD700;
 }
 </style>

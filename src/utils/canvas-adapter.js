@@ -26,6 +26,9 @@ export class CanvasAdapter {
 
     // 初始化状态
     this.initialized = false
+
+    // 是否使用旧 Canvas API（小程序兼容性）
+    this.useOldApi = false
   }
 
   /**
@@ -96,12 +99,15 @@ export class CanvasAdapter {
     // 调试日志 - 帮助排查渲染问题
     console.log('=== CanvasAdapter 初始化完成 ===')
     console.log('环境:', this.isH5 ? 'H5' : '小程序/App')
+    console.log('使用旧API:', this.useOldApi)
     console.log('DPR:', this.dpr)
     console.log('传入尺寸: width=' + width + ', height=' + height)
     console.log('CSS尺寸: ' + this.cssWidth + ' x ' + this.cssHeight)
     console.log('逻辑尺寸: ' + this.logicWidth + ' x ' + this.logicHeight)
     console.log('物理尺寸: ' + this.physicalWidth + ' x ' + this.physicalHeight)
-    console.log('Canvas实际尺寸: ' + this.canvas.width + ' x ' + this.canvas.height)
+    if (this.canvas && typeof this.canvas.width !== 'undefined') {
+      console.log('Canvas实际尺寸: ' + this.canvas.width + ' x ' + this.canvas.height)
+    }
     console.log('scaleX=' + this.scaleX + ', scaleY=' + this.scaleY)
     if (this.isH5) {
       console.log('window.devicePixelRatio:', window.devicePixelRatio)
@@ -158,6 +164,16 @@ export class CanvasAdapter {
    */
   _setupCanvasWithRetry(component, canvasId, maxRetries, retryInterval) {
     return new Promise((resolve, reject) => {
+      // 小程序环境：使用旧 Canvas API（兼容性更好）
+      if (!this.isH5) {
+        this.ctx = uni.createCanvasContext(canvasId, component)
+        this.canvas = { width: this.physicalWidth, height: this.physicalHeight }
+        this.useOldApi = true
+        console.log('小程序使用旧 Canvas API')
+        resolve()
+        return  // 跳过 SelectorQuery
+      }
+
       let retries = 0
 
       const trySetup = () => {
@@ -198,12 +214,6 @@ export class CanvasAdapter {
                 console.log('  物理尺寸:', realCanvas.width, 'x', realCanvas.height)
                 console.log('  CSS尺寸:', realCanvas.style.width, realCanvas.style.height)
                 console.log('  DPR:', this.dpr, '(未应用 scale)')
-              } else {
-                // 小程序环境：需要手动处理 DPR
-                this.canvas.width = this.physicalWidth
-                this.canvas.height = this.physicalHeight
-                this.ctx.setTransform(1, 0, 0, 1, 0, 0)
-                this.ctx.scale(this.dpr, this.dpr)
               }
 
               resolve()
@@ -278,9 +288,23 @@ export class CanvasAdapter {
   }
 
   /**
+   * 提交绘制（旧 Canvas API 需要调用 draw）
+   */
+  commit() {
+    if (this.useOldApi && this.ctx && this.ctx.draw) {
+      this.ctx.draw()
+    }
+  }
+
+  /**
    * 处理窗口尺寸变化
    */
   async handleResize(component, canvasId) {
+    // 旧 API 不支持动态调整尺寸
+    if (this.useOldApi) {
+      return false
+    }
+
     const containerInfo = await this._getContainerSize(component, canvasId, 3, 50)
     if (!containerInfo) return false
 

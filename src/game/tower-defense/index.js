@@ -12,8 +12,10 @@ import { PathSystem } from './systems/PathSystem.js'
 import { ComboSystem } from './systems/ComboSystem.js'
 import { DifficultySystem } from './systems/DifficultySystem.js'
 import { AchievementSystem } from './systems/AchievementSystem.js'
+import { SaveSystem } from './systems/SaveSystem.js'
 import { TOWER_CONFIGS, TOWER_LIST, getUpgradedStats, getUpgradeCost } from './config/towers.js'
 import { ENEMY_CONFIGS, getWaveEnemies, getEnemyStats } from './config/enemies.js'
+import { LEVELS, getLevelConfig, isLevelUnlocked } from './config/levels.js'
 
 export {
   Game,
@@ -27,13 +29,17 @@ export {
   ComboSystem,
   DifficultySystem,
   AchievementSystem,
+  SaveSystem,
   TOWER_CONFIGS,
   TOWER_LIST,
   getUpgradedStats,
   getUpgradeCost,
   ENEMY_CONFIGS,
   getWaveEnemies,
-  getEnemyStats
+  getEnemyStats,
+  LEVELS,
+  getLevelConfig,
+  isLevelUnlocked
 }
 
 export default Game
